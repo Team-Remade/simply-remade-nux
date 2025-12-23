@@ -4,13 +4,18 @@ import * as THREE from 'three'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
-let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp
+let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp, handleClick
+let raycaster, mouse
 
 // Inject scene state
 const sceneObjects = inject('sceneObjects')
+const selectedObject = inject('selectedObject')
+const selectObject = inject('selectObject')
 
 // Map to track Three.js meshes for each scene object
 const meshMap = new Map()
+// Store outline for selected object
+let selectionOutline = null
 
 // Free fly controls state
 const controls = {
@@ -55,6 +60,10 @@ onMounted(() => {
     renderer.setSize(canvasContainer.value.clientWidth, canvasContainer.value.clientHeight)
     canvasContainer.value.appendChild(renderer.domElement)
 
+    // Initialize raycaster and mouse for object picking
+    raycaster = new THREE.Raycaster()
+    mouse = new THREE.Vector2()
+
     // Add lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5)
     scene.add(ambientLight)
@@ -71,6 +80,38 @@ onMounted(() => {
     //const axesHelper = new THREE.AxesHelper(5)
     //scene.add(axesHelper)
 
+    // Watch for selection changes to add edge outline
+    watch(selectedObject, (newSelected) => {
+      // Remove previous outline
+      if (selectionOutline) {
+        scene.remove(selectionOutline)
+        selectionOutline.geometry.dispose()
+        selectionOutline.material.dispose()
+        selectionOutline = null
+      }
+      
+      // Add outline to new selection
+      if (newSelected) {
+        const mesh = meshMap.get(newSelected.id)
+        if (mesh) {
+          // Create edges geometry from the mesh
+          const edges = new THREE.EdgesGeometry(mesh.geometry, 15) // 15 degree threshold
+          const lineMaterial = new THREE.LineBasicMaterial({
+            color: 0xffaa00, // Orange outline color
+            linewidth: 2 // Note: linewidth > 1 may not work on all platforms
+          })
+          selectionOutline = new THREE.LineSegments(edges, lineMaterial)
+          
+          // Match the mesh's transform
+          selectionOutline.position.copy(mesh.position)
+          selectionOutline.rotation.copy(mesh.rotation)
+          selectionOutline.scale.copy(mesh.scale)
+          
+          scene.add(selectionOutline)
+        }
+      }
+    })
+
     // Watch for changes in sceneObjects
     watch(sceneObjects, (newObjects) => {
       // Add any new objects that don't have a mesh yet
@@ -84,6 +125,9 @@ onMounted(() => {
             mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
             mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
             mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+            
+            // Store reference to scene object for picking
+            mesh.userData.sceneObjectId = obj.id
             
             scene.add(mesh)
             meshMap.set(obj.id, mesh)
@@ -110,6 +154,41 @@ onMounted(() => {
         
         // Request pointer lock for grabbed mouse behavior
         canvasContainer.value.requestPointerLock()
+      }
+    }
+
+    handleClick = (event) => {
+      // Only handle left click
+      if (event.button !== 0) return
+
+      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      const rect = canvasContainer.value.getBoundingClientRect()
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+      // Update raycaster with camera and mouse position
+      raycaster.setFromCamera(mouse, camera)
+
+      // Get all meshes in the scene (excluding helpers)
+      const pickableMeshes = Array.from(meshMap.values())
+
+      // Calculate intersections
+      const intersects = raycaster.intersectObjects(pickableMeshes, false)
+
+      if (intersects.length > 0) {
+        // Find the scene object that corresponds to the clicked mesh
+        const clickedMesh = intersects[0].object
+        const sceneObjectId = clickedMesh.userData.sceneObjectId
+
+        if (sceneObjectId) {
+          const obj = sceneObjects.value.find(o => o.id === sceneObjectId)
+          if (obj) {
+            selectObject(obj)
+          }
+        }
+      } else {
+        // Deselect if clicking on empty space
+        selectObject(null)
       }
     }
 
@@ -193,6 +272,7 @@ onMounted(() => {
     canvasContainer.value.addEventListener('mousedown', handleMouseDown)
     canvasContainer.value.addEventListener('mousemove', handleMouseMove)
     canvasContainer.value.addEventListener('mouseup', handleMouseUp)
+    canvasContainer.value.addEventListener('click', handleClick)
     canvasContainer.value.addEventListener('contextmenu', handleContextMenu)
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
@@ -240,6 +320,13 @@ onMounted(() => {
           mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
           mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
           mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+          
+          // Update outline if this is the selected object
+          if (selectedObject.value && selectedObject.value.id === obj.id && selectionOutline) {
+            selectionOutline.position.copy(mesh.position)
+            selectionOutline.rotation.copy(mesh.rotation)
+            selectionOutline.scale.copy(mesh.scale)
+          }
         }
       })
 
@@ -276,6 +363,7 @@ onUnmounted(() => {
     canvasContainer.value.removeEventListener('mousedown', handleMouseDown)
     canvasContainer.value.removeEventListener('mousemove', handleMouseMove)
     canvasContainer.value.removeEventListener('mouseup', handleMouseUp)
+    canvasContainer.value.removeEventListener('click', handleClick)
     canvasContainer.value.removeEventListener('contextmenu', handleContextMenu)
   }
   window.removeEventListener('keydown', handleKeyDown)
