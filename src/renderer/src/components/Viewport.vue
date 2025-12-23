@@ -1,0 +1,293 @@
+<script setup>
+import { ref, inject, watch, onMounted, onUnmounted } from 'vue'
+import * as THREE from 'three'
+
+const canvasContainer = ref(null)
+let scene, camera, renderer, animationId, handleResize
+let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp
+
+// Inject scene state
+const sceneObjects = inject('sceneObjects')
+
+// Map to track Three.js meshes for each scene object
+const meshMap = new Map()
+
+// Free fly controls state
+const controls = {
+  isRightMouseDown: false,
+  lastMouseX: 0,
+  lastMouseY: 0,
+  moveForward: false,
+  moveBackward: false,
+  moveLeft: false,
+  moveRight: false,
+  moveUp: false,
+  moveDown: false,
+  yaw: 0, // Rotation around Y axis
+  pitch: 0, // Rotation around X axis
+  moveSpeed: 0.1,
+  lookSpeed: 0.002
+}
+
+onMounted(() => {
+  if (canvasContainer.value) {
+    // Create scene
+    scene = new THREE.Scene()
+    scene.background = new THREE.Color(0x1a1a1a)
+
+    // Create camera
+    camera = new THREE.PerspectiveCamera(
+      75,
+      canvasContainer.value.clientWidth / canvasContainer.value.clientHeight,
+      0.1,
+      1000
+    )
+    camera.position.set(5, 5, 5)
+    camera.rotation.order = 'YXZ'
+    camera.lookAt(0, 0, 0)
+    
+    // Initialize yaw and pitch from camera's rotation after lookAt
+    controls.yaw = camera.rotation.y
+    controls.pitch = camera.rotation.x
+
+    // Create renderer
+    renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setSize(canvasContainer.value.clientWidth, canvasContainer.value.clientHeight)
+    canvasContainer.value.appendChild(renderer.domElement)
+
+    // Add lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5)
+    scene.add(ambientLight)
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
+    directionalLight.position.set(5, 5, 5)
+    scene.add(directionalLight)
+
+    // Add grid helper
+    const gridHelper = new THREE.GridHelper(10, 10, 0xff0000, 0x333333)
+    scene.add(gridHelper)
+
+    // Add axes helper
+    //const axesHelper = new THREE.AxesHelper(5)
+    //scene.add(axesHelper)
+
+    // Watch for changes in sceneObjects
+    watch(sceneObjects, (newObjects) => {
+      // Add any new objects that don't have a mesh yet
+      newObjects.forEach(obj => {
+        if (!meshMap.has(obj.id)) {
+          if (obj.type === 'cube') {
+            const geometry = new THREE.BoxGeometry(1, 1, 1)
+            const material = new THREE.MeshStandardMaterial({ color: 0x3c8edb })
+            const mesh = new THREE.Mesh(geometry, material)
+            
+            mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
+            mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
+            mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+            
+            scene.add(mesh)
+            meshMap.set(obj.id, mesh)
+          }
+        }
+      })
+      
+      // Remove meshes for deleted objects
+      const currentIds = new Set(newObjects.map(obj => obj.id))
+      for (const [id, mesh] of meshMap.entries()) {
+        if (!currentIds.has(id)) {
+          scene.remove(mesh)
+          mesh.geometry.dispose()
+          mesh.material.dispose()
+          meshMap.delete(id)
+        }
+      }
+    }, { deep: true })
+
+    // Mouse event handlers
+    handleMouseDown = (event) => {
+      if (event.button === 2) { // Right mouse button
+        controls.isRightMouseDown = true
+        
+        // Request pointer lock for grabbed mouse behavior
+        canvasContainer.value.requestPointerLock()
+      }
+    }
+
+    handleMouseMove = (event) => {
+      if (controls.isRightMouseDown && document.pointerLockElement === canvasContainer.value) {
+        // Use movementX/Y for pointer lock (relative movement)
+        const deltaX = event.movementX
+        const deltaY = event.movementY
+
+        controls.yaw -= deltaX * controls.lookSpeed
+        controls.pitch -= deltaY * controls.lookSpeed
+
+        // Clamp pitch to prevent camera flipping
+        controls.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, controls.pitch))
+      }
+    }
+
+    handleMouseUp = (event) => {
+      if (event.button === 2) {
+        controls.isRightMouseDown = false
+        
+        // Exit pointer lock
+        if (document.pointerLockElement === canvasContainer.value) {
+          document.exitPointerLock()
+        }
+      }
+    }
+
+    handleContextMenu = (event) => {
+      event.preventDefault() // Prevent context menu from appearing
+    }
+
+    // Keyboard event handlers
+    handleKeyDown = (event) => {
+      switch (event.key.toLowerCase()) {
+        case 'w':
+          controls.moveForward = true
+          break
+        case 's':
+          controls.moveBackward = true
+          break
+        case 'a':
+          controls.moveLeft = true
+          break
+        case 'd':
+          controls.moveRight = true
+          break
+        case 'q':
+          controls.moveDown = true
+          break
+        case 'e':
+          controls.moveUp = true
+          break
+      }
+    }
+
+    handleKeyUp = (event) => {
+      switch (event.key.toLowerCase()) {
+        case 'w':
+          controls.moveForward = false
+          break
+        case 's':
+          controls.moveBackward = false
+          break
+        case 'a':
+          controls.moveLeft = false
+          break
+        case 'd':
+          controls.moveRight = false
+          break
+        case 'q':
+          controls.moveDown = false
+          break
+        case 'e':
+          controls.moveUp = false
+          break
+      }
+    }
+
+    // Add event listeners
+    canvasContainer.value.addEventListener('mousedown', handleMouseDown)
+    canvasContainer.value.addEventListener('mousemove', handleMouseMove)
+    canvasContainer.value.addEventListener('mouseup', handleMouseUp)
+    canvasContainer.value.addEventListener('contextmenu', handleContextMenu)
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+
+    // Animation loop
+    const animate = () => {
+      animationId = requestAnimationFrame(animate)
+
+      // Update camera rotation based on mouse movement
+      camera.rotation.order = 'YXZ'
+      camera.rotation.y = controls.yaw
+      camera.rotation.x = controls.pitch
+
+      // Calculate movement direction based on camera rotation
+      const forward = new THREE.Vector3()
+      const right = new THREE.Vector3()
+      
+      camera.getWorldDirection(forward)
+      right.crossVectors(camera.up, forward).normalize()
+
+      // Update camera position based on keyboard input
+      if (controls.moveForward) {
+        camera.position.addScaledVector(forward, controls.moveSpeed)
+      }
+      if (controls.moveBackward) {
+        camera.position.addScaledVector(forward, -controls.moveSpeed)
+      }
+      if (controls.moveLeft) {
+        camera.position.addScaledVector(right, controls.moveSpeed)
+      }
+      if (controls.moveRight) {
+        camera.position.addScaledVector(right, -controls.moveSpeed)
+      }
+      if (controls.moveUp) {
+        camera.position.y += controls.moveSpeed
+      }
+      if (controls.moveDown) {
+        camera.position.y -= controls.moveSpeed
+      }
+
+      // Update mesh transforms from scene objects
+      sceneObjects.value.forEach(obj => {
+        const mesh = meshMap.get(obj.id)
+        if (mesh) {
+          mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
+          mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
+          mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+        }
+      })
+
+      renderer.render(scene, camera)
+    }
+    animate()
+
+    // Handle window resize
+    handleResize = () => {
+      if (canvasContainer.value) {
+        camera.aspect = canvasContainer.value.clientWidth / canvasContainer.value.clientHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(canvasContainer.value.clientWidth, canvasContainer.value.clientHeight)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+  }
+})
+
+onUnmounted(() => {
+  // Clean up
+  if (animationId) {
+    cancelAnimationFrame(animationId)
+  }
+  if (renderer) {
+    renderer.dispose()
+  }
+  if (handleResize) {
+    window.removeEventListener('resize', handleResize)
+  }
+  
+  // Remove event listeners
+  if (canvasContainer.value) {
+    canvasContainer.value.removeEventListener('mousedown', handleMouseDown)
+    canvasContainer.value.removeEventListener('mousemove', handleMouseMove)
+    canvasContainer.value.removeEventListener('mouseup', handleMouseUp)
+    canvasContainer.value.removeEventListener('contextmenu', handleContextMenu)
+  }
+  window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('keyup', handleKeyUp)
+})
+</script>
+
+<template>
+  <div class="flex flex-col bg-[#1a1a1a] border border-[#2c2c2c] h-full">
+    <div class="bg-[#2c2c2c] text-[#aaa] px-3 py-1 text-xs border-b border-[#1a1a1a]">
+      <span>3D Viewport</span>
+    </div>
+    <div ref="canvasContainer" class="w-full h-full"></div>
+  </div>
+</template>
