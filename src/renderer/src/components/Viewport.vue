@@ -1,11 +1,12 @@
 <script setup>
 import { ref, inject, watch, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
 let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp, handleClick
-let raycaster, mouse
+let raycaster, mouse, transformControls
 
 // Inject scene state
 const sceneObjects = inject('sceneObjects')
@@ -16,6 +17,11 @@ const selectObject = inject('selectObject')
 const meshMap = new Map()
 // Store outline for selected object
 let selectionOutline = null
+
+// Transform mode state ('translate', 'rotate', 'scale')
+const transformMode = ref('translate')
+// Transform space state ('world', 'local')
+const transformSpace = ref('world')
 
 // Free fly controls state
 const controls = {
@@ -31,7 +37,9 @@ const controls = {
   yaw: 0, // Rotation around Y axis
   pitch: 0, // Rotation around X axis
   moveSpeed: 0.1,
-  lookSpeed: 0.002
+  lookSpeed: 0.002,
+  isTransformDragging: false,
+  wasTransformDragging: false // Track if we were dragging to prevent click selection
 }
 
 onMounted(() => {
@@ -80,6 +88,39 @@ onMounted(() => {
     //const axesHelper = new THREE.AxesHelper(5)
     //scene.add(axesHelper)
 
+    // Initialize transform controls
+    transformControls = new TransformControls(camera, renderer.domElement)
+    transformControls.setMode(transformMode.value)
+    transformControls.setSpace('world')
+    transformControls.setSize(1.5) // Make gizmo larger and more visible
+    scene.add(transformControls.getHelper()) // Add the visual helper to the scene
+
+    // Handle transform control events
+    transformControls.addEventListener('dragging-changed', (event) => {
+      controls.isTransformDragging = event.value
+      // Track if we were dragging to prevent click selection
+      if (event.value) {
+        controls.wasTransformDragging = true
+        controls.isRightMouseDown = false
+      }
+    })
+
+    // Update scene object when transform control changes
+    transformControls.addEventListener('objectChange', () => {
+      if (selectedObject.value && transformControls.object) {
+        const mesh = transformControls.object
+        selectedObject.value.position.x = mesh.position.x
+        selectedObject.value.position.y = mesh.position.y
+        selectedObject.value.position.z = mesh.position.z
+        selectedObject.value.rotation.x = mesh.rotation.x
+        selectedObject.value.rotation.y = mesh.rotation.y
+        selectedObject.value.rotation.z = mesh.rotation.z
+        selectedObject.value.scale.x = mesh.scale.x
+        selectedObject.value.scale.y = mesh.scale.y
+        selectedObject.value.scale.z = mesh.scale.z
+      }
+    })
+
     // Watch for selection changes to add edge outline
     watch(selectedObject, (newSelected) => {
       // Remove previous outline
@@ -89,6 +130,9 @@ onMounted(() => {
         selectionOutline.material.dispose()
         selectionOutline = null
       }
+      
+      // Detach transform controls
+      transformControls.detach()
       
       // Add outline to new selection
       if (newSelected) {
@@ -108,7 +152,25 @@ onMounted(() => {
           selectionOutline.scale.copy(mesh.scale)
           
           scene.add(selectionOutline)
+          
+          // Attach transform controls to selected mesh
+          transformControls.attach(mesh)
+          console.log('Transform controls attached to mesh', mesh)
         }
+      }
+    })
+
+    // Watch for transform mode changes
+    watch(transformMode, (newMode) => {
+      if (transformControls) {
+        transformControls.setMode(newMode)
+      }
+    })
+
+    // Watch for transform space changes
+    watch(transformSpace, (newSpace) => {
+      if (transformControls) {
+        transformControls.setSpace(newSpace)
       }
     })
 
@@ -150,16 +212,28 @@ onMounted(() => {
     // Mouse event handlers
     handleMouseDown = (event) => {
       if (event.button === 2) { // Right mouse button
-        controls.isRightMouseDown = true
-        
-        // Request pointer lock for grabbed mouse behavior
-        canvasContainer.value.requestPointerLock()
+        // Don't enable camera controls if dragging transform gizmo
+        if (!controls.isTransformDragging) {
+          controls.isRightMouseDown = true
+          
+          // Request pointer lock for grabbed mouse behavior
+          canvasContainer.value.requestPointerLock()
+        }
       }
     }
 
     handleClick = (event) => {
       // Only handle left click
       if (event.button !== 0) return
+      
+      // Don't handle click if we're interacting with transform controls
+      if (controls.isTransformDragging) return
+      
+      // Don't handle click if we just finished dragging the gizmo
+      if (controls.wasTransformDragging) {
+        controls.wasTransformDragging = false
+        return
+      }
 
       // Calculate mouse position in normalized device coordinates (-1 to +1)
       const rect = canvasContainer.value.getBoundingClientRect()
@@ -184,11 +258,13 @@ onMounted(() => {
           const obj = sceneObjects.value.find(o => o.id === sceneObjectId)
           if (obj) {
             selectObject(obj)
+            console.log('Object selected, gizmo should be visible')
           }
         }
       } else {
         // Deselect if clicking on empty space
         selectObject(null)
+        console.log('Deselected')
       }
     }
 
@@ -223,25 +299,57 @@ onMounted(() => {
 
     // Keyboard event handlers
     handleKeyDown = (event) => {
-      switch (event.key.toLowerCase()) {
-        case 'w':
-          controls.moveForward = true
-          break
-        case 's':
-          controls.moveBackward = true
-          break
-        case 'a':
-          controls.moveLeft = true
-          break
-        case 'd':
-          controls.moveRight = true
-          break
-        case 'q':
-          controls.moveDown = true
-          break
-        case 'e':
-          controls.moveUp = true
-          break
+      // Don't handle camera keys if dragging transform
+      if (controls.isTransformDragging) return
+      
+      const key = event.key.toLowerCase()
+      
+      // Camera movement keys - when right mouse button is held, these take priority
+      if (controls.isRightMouseDown) {
+        switch (key) {
+          case 'w':
+            controls.moveForward = true
+            break
+          case 's':
+            controls.moveBackward = true
+            break
+          case 'a':
+            controls.moveLeft = true
+            break
+          case 'd':
+            controls.moveRight = true
+            break
+          case 'q':
+            controls.moveDown = true
+            break
+          case 'e':
+            controls.moveUp = true
+            break
+        }
+        return // Don't process transform shortcuts when navigating
+      }
+      
+      // Transform shortcuts - work when an object is selected
+      if (selectedObject.value) {
+        // Transform mode shortcuts
+        if (key === 't') {
+          transformMode.value = 'translate'
+          return
+        }
+        if (key === 'r') {
+          transformMode.value = 'rotate'
+          return
+        }
+        if (key === 's') {
+          transformMode.value = 'scale'
+          return
+        }
+        // Transform space toggle
+        if (key === 'g') {
+          transformSpace.value = transformSpace.value === 'world' ? 'local' : 'world'
+          console.log('Transform space:', transformSpace.value)
+          return
+        }
       }
     }
 
@@ -373,8 +481,41 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col bg-[#1a1a1a] border border-[#2c2c2c] h-full">
-    <div class="bg-[#2c2c2c] text-[#aaa] px-3 py-1 text-xs border-b border-[#1a1a1a]">
+    <div class="bg-[#2c2c2c] text-[#aaa] px-3 py-1 text-xs border-b border-[#1a1a1a] flex items-center justify-between">
       <span>3D Viewport</span>
+      <div v-if="selectedObject" class="flex gap-2">
+        <div class="flex gap-1">
+          <button
+            @click="transformMode = 'translate'"
+            :class="['px-2 py-0.5 text-xs rounded', transformMode === 'translate' ? 'bg-[#3c8edb] text-white' : 'bg-[#1a1a1a] hover:bg-[#333]']"
+            title="Translate (T)"
+          >
+            Move
+          </button>
+          <button
+            @click="transformMode = 'rotate'"
+            :class="['px-2 py-0.5 text-xs rounded', transformMode === 'rotate' ? 'bg-[#3c8edb] text-white' : 'bg-[#1a1a1a] hover:bg-[#333]']"
+            title="Rotate (R)"
+          >
+            Rotate
+          </button>
+          <button
+            @click="transformMode = 'scale'"
+            :class="['px-2 py-0.5 text-xs rounded', transformMode === 'scale' ? 'bg-[#3c8edb] text-white' : 'bg-[#1a1a1a] hover:bg-[#333]']"
+            title="Scale (S)"
+          >
+            Scale
+          </button>
+        </div>
+        <div class="border-l border-[#1a1a1a]"></div>
+        <button
+          @click="transformSpace = transformSpace === 'world' ? 'local' : 'world'"
+          :class="['px-2 py-0.5 text-xs rounded', 'bg-[#1a1a1a] hover:bg-[#333]']"
+          title="Toggle World/Local Space (G)"
+        >
+          {{ transformSpace === 'world' ? 'World' : 'Local' }}
+        </button>
+      </div>
     </div>
     <div ref="canvasContainer" class="w-full h-full"></div>
   </div>
