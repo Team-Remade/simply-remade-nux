@@ -1,7 +1,9 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../resources/appIcon01.png?asset'
+import chegg from '../../resources/chegg.png?asset'
+import { randomInt } from '../renderer/src/MathUtil'
 
 function createWindow() {
   // Create the browser window.
@@ -15,8 +17,26 @@ function createWindow() {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     },
-    backgroundColor: '#2c2e29'
+    backgroundColor: '#2c2e29',
+    icon: icon,
   })
+
+  // Set window size and center
+  let screenWidth = screen.getPrimaryDisplay().workAreaSize.width
+  let screenHeight = screen.getPrimaryDisplay().workAreaSize.height
+
+  screenWidth -= 400
+  screenHeight -= 320
+
+  mainWindow.setSize(screenWidth, screenHeight)
+  mainWindow.center()
+
+  // Window icon Easter egg. This has a small chance to replace Steve with Herobrine
+  const rand = randomInt(1, 1000)
+
+  if (rand === 1) {
+    mainWindow.setIcon(chegg)
+  }
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
