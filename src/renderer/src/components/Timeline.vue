@@ -30,16 +30,17 @@ const goToEnd = () => {
     </div>
     <div class="flex items-center gap-2 px-3 py-2 bg-[#2c2c2c] border-b border-[#1a1a1a]">
       <button @click="goToStart" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
-        ⏮
+        <i class="bi bi-chevron-bar-left"></i>
       </button>
       <button @click="play" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
-        {{ isPlaying ? '⏸' : '▶' }}
+        <i v-if="isPlaying" class="bi bi-pause"></i>
+        <i v-else class="bi bi-play"></i>
       </button>
       <button @click="stop" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
-        ⏹
+        <i class="bi bi-stop"></i>
       </button>
       <button @click="goToEnd" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
-        ⏭
+        <i class="bi bi-chevron-bar-right"></i>
       </button>
       <div class="flex items-center gap-2 ml-auto text-[#aaa] text-xs">
         <span>Frame:</span>
