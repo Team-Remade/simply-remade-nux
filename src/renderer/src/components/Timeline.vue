@@ -48,16 +48,17 @@ const goToEnd = () => {
         <span>/ {{ totalFrames }}</span>
       </div>
     </div>
-    <div class="relative flex-1 bg-[#1a1a1a] min-h-[60px]">
+    <div class="relative flex-1 bg-[#1a1a1a] min-h-[60px] overflow-hidden">
       <div class="relative w-full h-full">
         <div
           v-for="frame in Math.floor(totalFrames / 10) + 1"
           :key="frame"
+          v-show="frame * 10 <= totalFrames"
           class="absolute top-0 h-full"
           :style="{ left: `${(frame * 10) / totalFrames * 100}%` }"
         >
           <div class="w-px h-3 bg-[#4c4c4c] -ml-px"></div>
-          <div class="text-[#666] text-[10px] mt-0.5 -ml-2.5">{{ frame * 10 }}</div>
+          <div class="text-[#666] text-[10px] mt-0.5 -translate-x-1/2 whitespace-nowrap">{{ frame * 10 }}</div>
         </div>
       </div>
       <div class="absolute top-0 h-full pointer-events-none" :style="{ left: `${(currentFrame / totalFrames) * 100}%` }">
