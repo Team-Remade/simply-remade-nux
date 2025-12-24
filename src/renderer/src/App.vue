@@ -9,11 +9,13 @@ import Timeline from './components/Timeline.vue'
 // Shared state for scene objects
 const sceneObjects = ref([])
 const selectedObject = ref(null)
+const currentFrame = ref(0)
 let cubeCounter = 0
 
 // Provide scene state to child components
 provide('sceneObjects', sceneObjects)
 provide('selectedObject', selectedObject)
+provide('currentFrame', currentFrame)
 provide('selectObject', (obj) => {
   selectedObject.value = obj
 })
@@ -58,7 +60,7 @@ onUnmounted(() => {
         <div class="flex-1 min-h-0">
           <Viewport />
         </div>
-        <div class="h-[150px] shrink-0">
+        <div class="h-[250px] shrink-0">
           <Timeline />
         </div>
       </div>

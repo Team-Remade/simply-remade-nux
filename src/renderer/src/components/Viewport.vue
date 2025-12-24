@@ -2,6 +2,7 @@
 import { ref, inject, watch, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
+import { useKeyframes } from '../composables/useKeyframes'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
@@ -12,6 +13,12 @@ let raycaster, mouse, transformControls
 const sceneObjects = inject('sceneObjects')
 const selectedObject = inject('selectedObject')
 const selectObject = inject('selectObject')
+
+// Use keyframe composable
+const { addKeyframeAtCurrentFrame } = useKeyframes()
+
+// Track previous transform values to detect changes
+const previousTransform = ref({})
 
 // Map to track Three.js meshes for each scene object
 const meshMap = new Map()
@@ -102,6 +109,58 @@ onMounted(() => {
       if (event.value) {
         controls.wasTransformDragging = true
         controls.isRightMouseDown = false
+        // Store initial transform state when starting drag
+        if (selectedObject.value) {
+          previousTransform.value = {
+            position: { ...selectedObject.value.position },
+            rotation: { ...selectedObject.value.rotation },
+            scale: { ...selectedObject.value.scale }
+          }
+        }
+      } else {
+        // When drag ends, check what changed and create keyframes
+        if (selectedObject.value && previousTransform.value) {
+          const mode = transformMode.value
+          const obj = selectedObject.value
+          const prev = previousTransform.value
+          
+          if (mode === 'translate') {
+            // Check which axes changed
+            if (obj.position.x !== prev.position.x) {
+              addKeyframeAtCurrentFrame(obj, 'position', 'x')
+            }
+            if (obj.position.y !== prev.position.y) {
+              addKeyframeAtCurrentFrame(obj, 'position', 'y')
+            }
+            if (obj.position.z !== prev.position.z) {
+              addKeyframeAtCurrentFrame(obj, 'position', 'z')
+            }
+          } else if (mode === 'rotate') {
+            // Check which axes changed
+            if (obj.rotation.x !== prev.rotation.x) {
+              addKeyframeAtCurrentFrame(obj, 'rotation', 'x')
+            }
+            if (obj.rotation.y !== prev.rotation.y) {
+              addKeyframeAtCurrentFrame(obj, 'rotation', 'y')
+            }
+            if (obj.rotation.z !== prev.rotation.z) {
+              addKeyframeAtCurrentFrame(obj, 'rotation', 'z')
+            }
+          } else if (mode === 'scale') {
+            // Check which axes changed
+            if (obj.scale.x !== prev.scale.x) {
+              addKeyframeAtCurrentFrame(obj, 'scale', 'x')
+            }
+            if (obj.scale.y !== prev.scale.y) {
+              addKeyframeAtCurrentFrame(obj, 'scale', 'y')
+            }
+            if (obj.scale.z !== prev.scale.z) {
+              addKeyframeAtCurrentFrame(obj, 'scale', 'z')
+            }
+          }
+          
+          previousTransform.value = {}
+        }
       }
     })
 
