@@ -22,8 +22,8 @@ const previousTransform = ref({})
 
 // Map to track Three.js meshes for each scene object
 const meshMap = new Map()
-// Store outline for selected object
-let selectionOutline = null
+// Store outlines for selected object and its children
+const selectionOutlines = []
 
 // Transform mode state ('translate', 'rotate', 'scale')
 const transformMode = ref('translate')
@@ -182,35 +182,67 @@ onMounted(() => {
 
     // Watch for selection changes to add edge outline
     watch(selectedObject, (newSelected) => {
-      // Remove previous outline
-      if (selectionOutline) {
-        scene.remove(selectionOutline)
-        selectionOutline.geometry.dispose()
-        selectionOutline.material.dispose()
-        selectionOutline = null
-      }
+      // Remove previous outlines
+      selectionOutlines.forEach(outline => {
+        if (outline.parent) {
+          outline.parent.remove(outline)
+        }
+        outline.geometry.dispose()
+        outline.material.dispose()
+      })
+      selectionOutlines.length = 0
       
       // Detach transform controls
       transformControls.detach()
       
-      // Add outline to new selection
+      // Add outline to new selection and all its children
       if (newSelected) {
         const mesh = meshMap.get(newSelected.id)
         if (mesh) {
-          // Create edges geometry from the mesh
-          const edges = new THREE.EdgesGeometry(mesh.geometry, 15) // 15 degree threshold
+          // Create outline for selected object
+          const edges = new THREE.EdgesGeometry(mesh.geometry, 15)
           const lineMaterial = new THREE.LineBasicMaterial({
             color: 0xffaa00, // Orange outline color
-            linewidth: 2 // Note: linewidth > 1 may not work on all platforms
+            linewidth: 2
           })
-          selectionOutline = new THREE.LineSegments(edges, lineMaterial)
+          const outline = new THREE.LineSegments(edges, lineMaterial)
           
-          // Match the mesh's transform
-          selectionOutline.position.copy(mesh.position)
-          selectionOutline.rotation.copy(mesh.rotation)
-          selectionOutline.scale.copy(mesh.scale)
+          // Add outline as a child of the mesh
+          outline.position.set(0, 0, 0)
+          outline.rotation.set(0, 0, 0)
+          outline.scale.set(1, 1, 1)
           
-          scene.add(selectionOutline)
+          mesh.add(outline)
+          selectionOutlines.push(outline)
+          
+          // Recursively add outlines for all children
+          const addChildOutlines = (obj) => {
+            if (obj.children && obj.children.length > 0) {
+              obj.children.forEach(child => {
+                const childMesh = meshMap.get(child.id)
+                if (childMesh) {
+                  const childEdges = new THREE.EdgesGeometry(childMesh.geometry, 15)
+                  const childLineMaterial = new THREE.LineBasicMaterial({
+                    color: 0xffaa00,
+                    linewidth: 2
+                  })
+                  const childOutline = new THREE.LineSegments(childEdges, childLineMaterial)
+                  
+                  childOutline.position.set(0, 0, 0)
+                  childOutline.rotation.set(0, 0, 0)
+                  childOutline.scale.set(1, 1, 1)
+                  
+                  childMesh.add(childOutline)
+                  selectionOutlines.push(childOutline)
+                  
+                  // Recursively process grandchildren
+                  addChildOutlines(child)
+                }
+              })
+            }
+          }
+          
+          addChildOutlines(newSelected)
           
           // Attach transform controls to selected mesh
           transformControls.attach(mesh)
@@ -233,10 +265,28 @@ onMounted(() => {
       }
     })
 
+    // Recursive function to collect all objects including children
+    const collectAllObjects = (objects) => {
+      const allObjects = []
+      const traverse = (objs) => {
+        objs.forEach(obj => {
+          allObjects.push(obj)
+          if (obj.children && obj.children.length > 0) {
+            traverse(obj.children)
+          }
+        })
+      }
+      traverse(objects)
+      return allObjects
+    }
+
     // Watch for changes in sceneObjects
     watch(sceneObjects, (newObjects) => {
+      // Collect all objects including nested children
+      const allObjects = collectAllObjects(newObjects)
+      
       // Add any new objects that don't have a mesh yet
-      newObjects.forEach(obj => {
+      allObjects.forEach(obj => {
         if (!meshMap.has(obj.id)) {
           if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
@@ -250,17 +300,55 @@ onMounted(() => {
             // Store reference to scene object for picking
             mesh.userData.sceneObjectId = obj.id
             
-            scene.add(mesh)
+            // Add to scene or parent mesh
+            if (obj.parent) {
+              const parentMesh = meshMap.get(obj.parent)
+              if (parentMesh) {
+                parentMesh.add(mesh)
+              } else {
+                scene.add(mesh)
+              }
+            } else {
+              scene.add(mesh)
+            }
+            
             meshMap.set(obj.id, mesh)
           }
         }
       })
       
+      // Update parent-child relationships in Three.js hierarchy
+      allObjects.forEach(obj => {
+        const mesh = meshMap.get(obj.id)
+        if (mesh) {
+          if (obj.parent) {
+            const parentMesh = meshMap.get(obj.parent)
+            if (parentMesh && mesh.parent !== parentMesh) {
+              // Remove from current parent
+              if (mesh.parent) {
+                mesh.parent.remove(mesh)
+              }
+              // Add to new parent
+              parentMesh.add(mesh)
+            }
+          } else if (mesh.parent !== scene) {
+            // Should be at root level
+            if (mesh.parent) {
+              mesh.parent.remove(mesh)
+            }
+            scene.add(mesh)
+          }
+        }
+      })
+      
       // Remove meshes for deleted objects
-      const currentIds = new Set(newObjects.map(obj => obj.id))
+      const currentIds = new Set(allObjects.map(obj => obj.id))
       for (const [id, mesh] of meshMap.entries()) {
         if (!currentIds.has(id)) {
-          scene.remove(mesh)
+          // Remove from parent (either scene or another mesh)
+          if (mesh.parent) {
+            mesh.parent.remove(mesh)
+          }
           mesh.geometry.dispose()
           mesh.material.dispose()
           meshMap.delete(id)
@@ -314,10 +402,58 @@ onMounted(() => {
         const sceneObjectId = clickedMesh.userData.sceneObjectId
 
         if (sceneObjectId) {
-          const obj = sceneObjects.value.find(o => o.id === sceneObjectId)
-          if (obj) {
-            selectObject(obj)
-            console.log('Object selected, gizmo should be visible')
+          // Search all objects including children
+          const findObject = (objects, id) => {
+            for (const obj of objects) {
+              if (obj.id === id) return obj
+              if (obj.children) {
+                const found = findObject(obj.children, id)
+                if (found) return found
+              }
+            }
+            return null
+          }
+          
+          // Find the root parent of the clicked object
+          const findRoot = (obj) => {
+            if (!obj.parent) return obj
+            
+            // Find parent object
+            const parent = findObject(sceneObjects.value, obj.parent)
+            if (parent) {
+              return findRoot(parent)
+            }
+            return obj
+          }
+          
+          const clickedObj = findObject(sceneObjects.value, sceneObjectId)
+          if (clickedObj) {
+            // If clicking the same object - do nothing
+            if (selectedObject.value && selectedObject.value.id === clickedObj.id) {
+              return
+            }
+            
+            // Find roots for comparison
+            const selectedRoot = selectedObject.value ? findRoot(selectedObject.value) : null
+            const clickedRoot = findRoot(clickedObj)
+            
+            // If we're clicking within the same hierarchy and the root is already selected,
+            // select the clicked child directly
+            if (selectedRoot && selectedRoot.id === clickedRoot.id && selectedObject.value.id === clickedRoot.id) {
+              // Root is selected, clicking on a child - select the child
+              selectObject(clickedObj)
+              console.log('Child selected from root')
+            }
+            // If clicking within same hierarchy but a non-root child is selected, select clicked child
+            else if (selectedRoot && selectedRoot.id === clickedRoot.id && selectedObject.value.id !== clickedRoot.id) {
+              selectObject(clickedObj)
+              console.log('Different child selected within hierarchy')
+            }
+            // First click or different hierarchy - select root
+            else {
+              selectObject(clickedRoot)
+              console.log('Root selected')
+            }
           }
         }
       } else {
@@ -480,22 +616,26 @@ onMounted(() => {
         camera.position.y -= controls.moveSpeed
       }
 
-      // Update mesh transforms from scene objects
-      sceneObjects.value.forEach(obj => {
-        const mesh = meshMap.get(obj.id)
-        if (mesh) {
-          mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
-          mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
-          mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
-          
-          // Update outline if this is the selected object
-          if (selectedObject.value && selectedObject.value.id === obj.id && selectionOutline) {
-            selectionOutline.position.copy(mesh.position)
-            selectionOutline.rotation.copy(mesh.rotation)
-            selectionOutline.scale.copy(mesh.scale)
+      // Update mesh transforms from scene objects (including nested children)
+      const updateMeshTransforms = (objects) => {
+        objects.forEach(obj => {
+          const mesh = meshMap.get(obj.id)
+          if (mesh) {
+            mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
+            mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
+            mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+            
+            // Outline is now a child of the mesh, so it follows automatically
           }
-        }
-      })
+          
+          // Recursively update children
+          if (obj.children && obj.children.length > 0) {
+            updateMeshTransforms(obj.children)
+          }
+        })
+      }
+      
+      updateMeshTransforms(sceneObjects.value)
 
       renderer.render(scene, camera)
     }

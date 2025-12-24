@@ -20,6 +20,95 @@ provide('selectObject', (obj) => {
   selectedObject.value = obj
 })
 
+// Function to set parent for a scene object
+const setParent = (child, parent) => {
+  if (!child) return
+  
+  // Remove child from its current parent's children array if it has a parent
+  if (child.parent) {
+    const oldParent = sceneObjects.value.find(obj => obj.id === child.parent)
+    if (oldParent && oldParent.children) {
+      const index = oldParent.children.findIndex(c => c.id === child.id)
+      if (index !== -1) {
+        oldParent.children.splice(index, 1)
+        if (oldParent.children.length === 0) {
+          delete oldParent.children
+        }
+      }
+    }
+    // Remove from root level if it was there
+    const rootIndex = sceneObjects.value.findIndex(obj => obj.id === child.id)
+    if (rootIndex === -1) {
+      // Child was in a parent, remove parent reference
+      child.parent = null
+    }
+  }
+  
+  // Set new parent
+  if (parent) {
+    // Remove child from root level if it's there
+    const rootIndex = sceneObjects.value.findIndex(obj => obj.id === child.id)
+    if (rootIndex !== -1) {
+      sceneObjects.value.splice(rootIndex, 1)
+    }
+    
+    // Initialize parent's children array if needed
+    if (!parent.children) {
+      parent.children = []
+    }
+    
+    // Add child to new parent's children array
+    if (!parent.children.find(c => c.id === child.id)) {
+      parent.children.push(child)
+    }
+    
+    child.parent = parent.id
+    parent.expanded = true // Auto-expand parent to show child
+  } else {
+    // Setting parent to null - move to root level
+    child.parent = null
+    if (!sceneObjects.value.find(obj => obj.id === child.id)) {
+      sceneObjects.value.push(child)
+    }
+  }
+}
+
+// Provide setParent function to child components
+provide('setParent', setParent)
+
+// Function to delete an object from the scene
+const deleteObject = (obj) => {
+  if (!obj) return
+  
+  // If object has a parent, remove it from parent's children
+  if (obj.parent) {
+    const parent = sceneObjects.value.find(o => o.id === obj.parent)
+    if (parent && parent.children) {
+      const index = parent.children.findIndex(c => c.id === obj.id)
+      if (index !== -1) {
+        parent.children.splice(index, 1)
+        if (parent.children.length === 0) {
+          delete parent.children
+        }
+      }
+    }
+  } else {
+    // Remove from root level
+    const index = sceneObjects.value.findIndex(o => o.id === obj.id)
+    if (index !== -1) {
+      sceneObjects.value.splice(index, 1)
+    }
+  }
+  
+  // If deleted object was selected, deselect it
+  if (selectedObject.value === obj) {
+    selectedObject.value = null
+  }
+}
+
+// Provide deleteObject function to child components
+provide('deleteObject', deleteObject)
+
 // Function to spawn a cube
 const spawnCube = () => {
   cubeCounter++
@@ -30,7 +119,11 @@ const spawnCube = () => {
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1, z: 1 },
-    expanded: false
+    parent: null,
+    expanded: false,
+    setParent(parent) {
+      setParent(this, parent)
+    }
   }
   sceneObjects.value.push(newCube)
 }
