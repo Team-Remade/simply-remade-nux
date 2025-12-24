@@ -25,8 +25,8 @@ function createWindow() {
   let screenWidth = screen.getPrimaryDisplay().workAreaSize.width
   let screenHeight = screen.getPrimaryDisplay().workAreaSize.height
 
-  screenWidth -= 400
-  screenHeight -= 320
+  screenWidth -= 200
+  screenHeight -= 160
 
   mainWindow.setSize(screenWidth, screenHeight)
   mainWindow.center()
