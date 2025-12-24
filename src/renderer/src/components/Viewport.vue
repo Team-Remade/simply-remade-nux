@@ -8,11 +8,13 @@ const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
 let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp, handleClick
 let raycaster, mouse, transformControls
+let backgroundPlane = null
 
 // Inject scene state
 const sceneObjects = inject('sceneObjects')
 const selectedObject = inject('selectedObject')
 const selectObject = inject('selectObject')
+const projectSettings = inject('projectSettings')
 
 // Use keyframe composable
 const { addKeyframeAtCurrentFrame } = useKeyframes()
@@ -51,16 +53,16 @@ const controls = {
 
 onMounted(() => {
   if (canvasContainer.value) {
-    // Create scene
+    // Create main scene
     scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x1a1a1a)
+    scene.background = new THREE.Color(projectSettings.value.backgroundColor)
 
     // Create camera
     camera = new THREE.PerspectiveCamera(
       75,
       canvasContainer.value.clientWidth / canvasContainer.value.clientHeight,
       0.1,
-      1000
+      Number.MAX_SAFE_INTEGER
     )
     camera.position.set(5, 5, 5)
     camera.rotation.order = 'YXZ'
@@ -263,6 +265,108 @@ onMounted(() => {
       if (transformControls) {
         transformControls.setSpace(newSpace)
       }
+    })
+
+    // Watch for background color changes
+    watch(() => projectSettings.value.backgroundColor, (newColor) => {
+      if (scene) {
+        scene.background = new THREE.Color(newColor)
+      }
+    })
+
+    // Helper function to create/update background plane
+    const updateBackgroundPlane = () => {
+      if (!scene || !camera) return
+      
+      // Remove existing background plane if any
+      if (backgroundPlane) {
+        camera.remove(backgroundPlane)
+        backgroundPlane.geometry.dispose()
+        backgroundPlane.material.map?.dispose()
+        backgroundPlane.material.dispose()
+        backgroundPlane = null
+      }
+      
+      const newImage = projectSettings.value.backgroundImage
+      const stretchToFit = projectSettings.value.backgroundStretchToFit
+      
+      if (newImage) {
+        // Load texture from data URL
+        const textureLoader = new THREE.TextureLoader()
+        textureLoader.load(newImage, (texture) => {
+          const distance = Number.MAX_SAFE_INTEGER - 900
+          const vFov = camera.fov * Math.PI / 180
+          
+          let width, height
+          let offsetX = 0, offsetY = 0
+          
+          if (stretchToFit) {
+            // Stretch to fill viewport
+            height = 2 * Math.tan(vFov / 2) * distance
+            width = height * camera.aspect
+          } else {
+            // Use original image resolution, scaled by distance
+            // Calculate the size at the given distance that represents the original pixel dimensions
+            // We need to map pixels to world units based on distance from camera
+            // At distance d, the viewport height in world units is: 2 * tan(vFov/2) * d
+            // The pixel height of the viewport is the canvas height
+            const viewportHeightInWorldUnits = 2 * Math.tan(vFov / 2) * distance
+            const pixelsPerWorldUnit = camera.aspect * canvasContainer.value.clientHeight / viewportHeightInWorldUnits
+            
+            // Convert image pixel dimensions to world units at the background distance
+            height = texture.image.height / pixelsPerWorldUnit
+            width = texture.image.width / pixelsPerWorldUnit
+            
+            // Calculate viewport dimensions at this distance
+            const viewportHeight = viewportHeightInWorldUnits
+            const viewportWidth = viewportHeight * camera.aspect
+            
+            // Position image at top-left corner of viewport
+            // Offset by half the viewport dimensions minus half the image dimensions
+            offsetX = -(viewportWidth / 2 - width / 2)  // Move to left
+            offsetY = (viewportHeight / 2 - height / 2)  // Move to top
+          }
+          
+          // Create a plane with calculated dimensions
+          const geometry = new THREE.PlaneGeometry(width, height)
+          const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+          })
+          
+          backgroundPlane = new THREE.Mesh(geometry, material)
+          backgroundPlane.position.set(offsetX, offsetY, -distance)
+          backgroundPlane.renderOrder = -1000 // Render first
+          
+          // Attach to camera so it moves with viewport
+          camera.add(backgroundPlane)
+          
+          // Make sure camera is in scene
+          if (!camera.parent) {
+            scene.add(camera)
+          }
+          
+          console.log('Background plane created:', backgroundPlane, 'stretchToFit:', stretchToFit)
+        })
+      } else {
+        // Remove camera from scene if no background
+        if (camera.parent) {
+          scene.remove(camera)
+        }
+      }
+    }
+    
+    // Watch for background image changes
+    watch(() => projectSettings.value.backgroundImage, () => {
+      updateBackgroundPlane()
+    })
+    
+    // Watch for stretch to fit changes
+    watch(() => projectSettings.value.backgroundStretchToFit, () => {
+      updateBackgroundPlane()
     })
 
     // Recursive function to collect all objects including children

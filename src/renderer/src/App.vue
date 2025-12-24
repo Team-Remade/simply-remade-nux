@@ -12,10 +12,18 @@ const selectedObject = ref(null)
 const currentFrame = ref(0)
 let cubeCounter = 0
 
+// Project settings
+const projectSettings = ref({
+  backgroundColor: '#9393FF',
+  backgroundImage: null,
+  backgroundStretchToFit: true
+})
+
 // Provide scene state to child components
 provide('sceneObjects', sceneObjects)
 provide('selectedObject', selectedObject)
 provide('currentFrame', currentFrame)
+provide('projectSettings', projectSettings)
 provide('selectObject', (obj) => {
   selectedObject.value = obj
 })
