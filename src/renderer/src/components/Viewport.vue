@@ -3,6 +3,8 @@ import { ref, inject, watch, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { useKeyframes } from '../composables/useKeyframes'
+import benchIcon from '../assets/img/bench.png'
+import SpawnMenu from './SpawnMenu.vue'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
@@ -31,6 +33,9 @@ const selectionOutlines = []
 const transformMode = ref('translate')
 // Transform space state ('world', 'local')
 const transformSpace = ref('world')
+
+// Spawn menu state
+const showSpawnMenu = ref(false)
 
 // Free fly controls state
 const controls = {
@@ -820,6 +825,21 @@ onUnmounted(() => {
         </button>
       </div>
     </div>
-    <div ref="canvasContainer" class="w-full h-full"></div>
+    <div ref="canvasContainer" class="w-full h-full relative">
+      <!-- Spawn Menu Button -->
+      <button
+        @click="showSpawnMenu = !showSpawnMenu"
+        class="absolute top-4 left-4 w-12 h-12 bg-[#2c2c2c] hover:bg-[#3c3c3c] border border-[#3c3c3c] rounded shadow-lg flex items-center justify-center transition-colors z-10"
+        title="Spawn Objects"
+      >
+        <img :src="benchIcon" alt="Spawn" class="w-8 h-8" />
+      </button>
+
+      <!-- Spawn Menu Component -->
+      <SpawnMenu
+        :show="showSpawnMenu"
+        @close="showSpawnMenu = false"
+      />
+    </div>
   </div>
 </template>
