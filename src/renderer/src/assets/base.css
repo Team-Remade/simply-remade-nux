@@ -6,6 +6,7 @@
   html,
   body {
     @apply w-full h-full overflow-hidden;
+    font-size: 13px; /* Reduced from default 16px */
   }
 
   body {

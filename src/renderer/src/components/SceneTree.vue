@@ -126,10 +126,10 @@ const isDescendant = (checkObj, parentObj) => {
     @drop="handleDropOnRoot"
     @click="hideContextMenu"
   >
-    <div class="bg-[#2c2c2c] text-white px-3 py-2 text-sm font-medium border-b border-[#1a1a1a]">
+    <div class="bg-[#2c2c2c] text-white px-2 py-1.5 text-xs font-medium border-b border-[#1a1a1a]">
       Scene Tree
     </div>
-    <div class="flex-1 overflow-y-auto py-2">
+    <div class="flex-1 overflow-y-auto py-1">
       <div v-for="(obj, index) in sceneObjects" :key="index" class="w-full">
         <div
           draggable="true"

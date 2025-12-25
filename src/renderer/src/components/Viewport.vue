@@ -789,7 +789,7 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col bg-[#1a1a1a] border border-[#2c2c2c] h-full">
-    <div class="bg-[#2c2c2c] text-[#aaa] px-3 py-1 text-xs border-b border-[#1a1a1a] flex items-center justify-between">
+    <div class="bg-[#2c2c2c] text-[#aaa] px-2 py-1 text-xs border-b border-[#1a1a1a] flex items-center justify-between">
       <span>3D Viewport</span>
       <div v-if="selectedObject" class="flex gap-2">
         <div class="flex gap-1">

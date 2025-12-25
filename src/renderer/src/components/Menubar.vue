@@ -40,13 +40,13 @@ const closeMenu = () => {
     <div
       v-for="(item, index) in menuItems"
       :key="index"
-      class="relative px-4 py-2 cursor-pointer text-sm hover:bg-[#3c3c3c]"
+      class="relative px-3 py-1.5 cursor-pointer text-xs hover:bg-[#3c3c3c]"
       @click="toggleMenu(index)"
       @mouseenter="activeMenu !== null && toggleMenu(index)"
     >
       <span>{{ item.label }}</span>
-      <div v-if="activeMenu === index" class="absolute top-full left-0 bg-[#2c2c2c] border border-[#1a1a1a] min-w-[160px] shadow-lg z-[1000]">
-        <div v-for="(subitem, subindex) in item.submenu" :key="subindex" class="px-4 py-2 cursor-pointer hover:bg-[#3c3c3c]">
+      <div v-if="activeMenu === index" class="absolute top-full left-0 bg-[#2c2c2c] border border-[#1a1a1a] min-w-[140px] shadow-lg z-[1000]">
+        <div v-for="(subitem, subindex) in item.submenu" :key="subindex" class="px-3 py-1.5 cursor-pointer hover:bg-[#3c3c3c] text-xs">
           {{ subitem }}
         </div>
       </div>

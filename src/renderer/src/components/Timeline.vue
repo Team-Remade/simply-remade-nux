@@ -695,21 +695,21 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col bg-[#252525] border border-[#2c2c2c] h-full">
-    <div class="bg-[#2c2c2c] text-[#aaa] px-3 py-1 text-xs border-b border-[#1a1a1a]">
+    <div class="bg-[#2c2c2c] text-[#aaa] px-2 py-1 text-xs border-b border-[#1a1a1a]">
       <span>Timeline</span>
     </div>
-    <div class="flex items-center gap-2 px-3 py-2 bg-[#2c2c2c] border-b border-[#1a1a1a]">
-      <button @click="goToStart" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
+    <div class="flex items-center gap-2 px-2 py-1.5 bg-[#2c2c2c] border-b border-[#1a1a1a]">
+      <button @click="goToStart" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-2 py-0.5 cursor-pointer rounded text-xs hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
         <i class="bi bi-chevron-bar-left"></i>
       </button>
-      <button @click="play" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
+      <button @click="play" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-2 py-0.5 cursor-pointer rounded text-xs hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
         <i v-if="isPlaying" class="bi bi-pause"></i>
         <i v-else class="bi bi-play"></i>
       </button>
-      <button @click="stop" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
+      <button @click="stop" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-2 py-0.5 cursor-pointer rounded text-xs hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
         <i class="bi bi-stop"></i>
       </button>
-      <button @click="goToEnd" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-3 py-1 cursor-pointer rounded text-sm hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
+      <button @click="goToEnd" class="bg-[#3c3c3c] border border-[#4c4c4c] text-white px-2 py-0.5 cursor-pointer rounded text-xs hover:bg-[#4c4c4c] active:bg-[#2c2c2c]">
         <i class="bi bi-chevron-bar-right"></i>
       </button>
       <div class="flex items-center gap-2 ml-auto text-[#aaa] text-xs">
@@ -726,8 +726,8 @@ onUnmounted(() => {
     <!-- Column Layout: Object Names + Keyframe Area -->
     <div class="flex flex-1 overflow-hidden">
       <!-- Left Column: Object Names -->
-      <div class="w-[180px] bg-[#252525] border-r border-[#1a1a1a] flex-shrink-0 flex flex-col">
-        <div class="h-8 bg-[#2c2c2c] border-b border-[#1a1a1a] flex items-center px-3 text-[#aaa] text-xs flex-shrink-0">
+      <div class="w-[150px] bg-[#252525] border-r border-[#1a1a1a] flex-shrink-0 flex flex-col">
+        <div class="h-7 bg-[#2c2c2c] border-b border-[#1a1a1a] flex items-center px-2 text-[#aaa] text-xs flex-shrink-0">
           Objects
         </div>
         <div ref="leftScrollContainer" @scroll="syncScrollLeft" class="flex-1 overflow-y-scroll overflow-x-hidden scrollbar-hidden">
@@ -735,7 +735,7 @@ onUnmounted(() => {
           <template v-if="selectedObject">
             <!-- Object row -->
             <div
-              class="h-8 flex items-center px-3 text-[#ccc] text-xs border-b border-[#1a1a1a] bg-[#3c5a99] text-white"
+              class="h-7 flex items-center px-2 text-[#ccc] text-xs border-b border-[#1a1a1a] bg-[#3c5a99] text-white"
             >
               <button
                 @click.stop="toggleObjectExpand(selectedObject.id)"
@@ -806,7 +806,7 @@ onUnmounted(() => {
         <!-- Timeline Ruler -->
         <div
           ref="rulerContainer"
-          class="relative h-8 bg-[#2c2c2c] border-b border-[#1a1a1a] overflow-x-auto overflow-y-hidden cursor-pointer select-none"
+          class="relative h-7 bg-[#2c2c2c] border-b border-[#1a1a1a] overflow-x-auto overflow-y-hidden cursor-pointer select-none"
           style="scrollbar-width: none;"
           @mousedown="startScrubbing"
         >
@@ -849,7 +849,7 @@ onUnmounted(() => {
           <!-- Only show selected object -->
           <template v-if="selectedObject">
             <!-- Object row track -->
-            <div class="relative h-8 border-b border-[#1a1a1a] bg-[#2a2a2a]"></div>
+            <div class="relative h-7 border-b border-[#1a1a1a] bg-[#2a2a2a]"></div>
             
             <!-- Property tracks (when expanded) -->
             <template v-if="isObjectExpanded(selectedObject.id)">

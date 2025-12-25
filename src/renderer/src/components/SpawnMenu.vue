@@ -79,7 +79,7 @@ const closeMenu = () => {
   >
     <!-- Categories Column -->
     <div class="w-1/3 bg-[#1a1a1a] border-r border-[#3c3c3c] overflow-y-auto">
-      <div class="p-2 border-b border-[#3c3c3c] text-[#aaa] text-xs font-semibold">
+      <div class="p-1.5 border-b border-[#3c3c3c] text-[#aaa] text-xs font-semibold">
         Categories
       </div>
       <div class="p-1">
@@ -88,9 +88,9 @@ const closeMenu = () => {
           :key="category"
           @click="selectedCategory = category"
           :class="[
-            'w-full text-left px-3 py-2 text-sm rounded mb-1 transition-colors',
-            selectedCategory === category 
-              ? 'bg-[#3c8edb] text-white' 
+            'w-full text-left px-2 py-1.5 text-xs rounded mb-0.5 transition-colors',
+            selectedCategory === category
+              ? 'bg-[#3c8edb] text-white'
               : 'text-[#aaa] hover:bg-[#333]'
           ]"
         >
@@ -101,16 +101,16 @@ const closeMenu = () => {
 
     <!-- Objects Column -->
     <div class="flex-1 flex flex-col">
-      <div class="p-2 border-b border-[#3c3c3c] text-[#aaa] text-xs font-semibold">
+      <div class="p-1.5 border-b border-[#3c3c3c] text-[#aaa] text-xs font-semibold">
         {{ selectedCategory }}
       </div>
-      <div class="flex-1 overflow-y-auto p-2">
+      <div class="flex-1 overflow-y-auto p-1.5">
         <button
           v-for="item in currentCategoryItems"
           :key="item.type"
           @click="selectItem(item)"
           :class="[
-            'w-full text-left px-3 py-2 text-sm rounded mb-1 transition-colors',
+            'w-full text-left px-2 py-1.5 text-xs rounded mb-0.5 transition-colors',
             selectedItem?.type === item.type
               ? 'bg-[#3c8edb] text-white'
               : 'text-[#aaa] hover:bg-[#333]'
@@ -119,10 +119,10 @@ const closeMenu = () => {
           {{ item.name }}
         </button>
       </div>
-      <div class="p-2 border-t border-[#3c3c3c] flex justify-end gap-2">
+      <div class="p-1.5 border-t border-[#3c3c3c] flex justify-end gap-1.5">
         <button
           @click="closeMenu"
-          class="px-3 py-1 text-xs bg-[#1a1a1a] hover:bg-[#333] text-[#aaa] rounded transition-colors"
+          class="px-2 py-1 text-xs bg-[#1a1a1a] hover:bg-[#333] text-[#aaa] rounded transition-colors"
         >
           Close
         </button>
@@ -130,7 +130,7 @@ const closeMenu = () => {
           @click="createObject"
           :disabled="!selectedItem"
           :class="[
-            'px-3 py-1 text-xs rounded transition-colors',
+            'px-2 py-1 text-xs rounded transition-colors',
             selectedItem
               ? 'bg-[#3c8edb] hover:bg-[#2c7edb] text-white'
               : 'bg-[#1a1a1a] text-[#555] cursor-not-allowed'

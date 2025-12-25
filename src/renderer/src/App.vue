@@ -161,15 +161,15 @@ onUnmounted(() => {
         <div class="flex-1 min-h-0">
           <Viewport />
         </div>
-        <div class="h-[250px] shrink-0">
+        <div class="h-[180px] shrink-0">
           <Timeline />
         </div>
       </div>
-      <div class="flex flex-col w-[300px] gap-1 shrink-0">
-        <div class="flex-1 min-h-0">
+      <div class="flex flex-col w-[240px] gap-1 shrink-0">
+        <div class="h-[30%] min-h-0">
           <SceneTree />
         </div>
-        <div class="flex-1 min-h-0">
+        <div class="h-[70%] min-h-0">
           <PropertiesPanel />
         </div>
       </div>

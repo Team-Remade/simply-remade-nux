@@ -132,7 +132,7 @@ const handleBackgroundImageChange = (event) => {
 
 <template>
   <div class="flex flex-col bg-[#252525] border border-[#2c2c2c] h-full overflow-hidden">
-    <div class="bg-[#2c2c2c] text-white px-3 py-2 text-sm font-medium border-b border-[#1a1a1a]">
+    <div class="bg-[#2c2c2c] text-white px-2 py-1.5 text-xs font-medium border-b border-[#1a1a1a]">
       Properties
     </div>
     
@@ -141,7 +141,7 @@ const handleBackgroundImageChange = (event) => {
       <button
         @click="activeTab = 'project'"
         :class="[
-          'px-3 py-2 text-xs font-medium transition-colors',
+          'px-2 py-1.5 text-xs font-medium transition-colors',
           activeTab === 'project'
             ? 'bg-[#252525] text-white border-b-2 border-[#3c5a99]'
             : 'text-[#aaa] hover:text-white hover:bg-[#2c2c2c]'
@@ -153,7 +153,7 @@ const handleBackgroundImageChange = (event) => {
         v-if="selectedObject"
         @click="activeTab = 'object'"
         :class="[
-          'px-3 py-2 text-xs font-medium transition-colors',
+          'px-2 py-1.5 text-xs font-medium transition-colors',
           activeTab === 'object'
             ? 'bg-[#252525] text-white border-b-2 border-[#3c5a99]'
             : 'text-[#aaa] hover:text-white hover:bg-[#2c2c2c]'
@@ -164,7 +164,7 @@ const handleBackgroundImageChange = (event) => {
     </div>
     
     <!-- Tab Content -->
-    <div class="flex-1 overflow-y-auto p-3">
+    <div class="flex-1 overflow-y-auto p-2">
       <!-- Project Properties Tab -->
       <div v-if="activeTab === 'project'">
         <!-- Main Project Settings Dropdown -->
