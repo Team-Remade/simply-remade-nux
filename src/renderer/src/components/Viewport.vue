@@ -87,11 +87,11 @@ onMounted(() => {
     mouse = new THREE.Vector2()
 
     // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3)
     scene.add(ambientLight)
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    directionalLight.position.set(5, 5, 5)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2)
+    directionalLight.position.set(5, 10, 7)
     scene.add(directionalLight)
 
     // Add grid helper
@@ -399,7 +399,7 @@ onMounted(() => {
         if (!meshMap.has(obj.id)) {
           if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
-            const material = new THREE.MeshStandardMaterial({ color: 0x3c8edb })
+            const material = new THREE.MeshStandardMaterial({ color: 0xffffff })
             const mesh = new THREE.Mesh(geometry, material)
             
             mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
