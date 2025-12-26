@@ -27,6 +27,7 @@ onMounted(async () => {
         name: block.name,
         type: 'block',
         blockPath: block.path,
+        category: block.category || null,
         id: block.path // Use path as unique identifier
       }))
     }
@@ -36,25 +37,53 @@ onMounted(async () => {
 })
 
 // Object categories and items
-const spawnCategories = computed(() => ({
-  'Primitives': [
-    { name: 'Cube', type: 'cube' },
-    { name: 'Sphere', type: 'sphere' },
-    { name: 'Cylinder', type: 'cylinder' },
-    { name: 'Cone', type: 'cone' },
-    { name: 'Plane', type: 'plane' }
-  ],
-  'Blocks': blocks.value,
-  'Lights': [
-    { name: 'Point Light', type: 'pointlight' },
-    { name: 'Directional Light', type: 'directionallight' },
-    { name: 'Spot Light', type: 'spotlight' }
-  ],
-  'Cameras': [
-    { name: 'Perspective Camera', type: 'perspective-camera' },
-    { name: 'Orthographic Camera', type: 'orthographic-camera' }
-  ]
-}))
+const spawnCategories = computed(() => {
+  // Group blocks by subcategory
+  const blocksByCategory = {}
+  
+  blocks.value.forEach(block => {
+    const category = block.category || 'Other'
+    if (!blocksByCategory[category]) {
+      blocksByCategory[category] = []
+    }
+    blocksByCategory[category].push(block)
+  })
+  
+  // Convert to items array with subcategory headers
+  const blockItems = []
+  const sortedCategories = Object.keys(blocksByCategory).sort()
+  
+  sortedCategories.forEach(category => {
+    // Add subcategory header
+    blockItems.push({
+      name: category,
+      type: 'subcategory-header',
+      isHeader: true
+    })
+    // Add blocks in this subcategory
+    blockItems.push(...blocksByCategory[category])
+  })
+  
+  return {
+    'Primitives': [
+      { name: 'Cube', type: 'cube' },
+      { name: 'Sphere', type: 'sphere' },
+      { name: 'Cylinder', type: 'cylinder' },
+      { name: 'Cone', type: 'cone' },
+      { name: 'Plane', type: 'plane' }
+    ],
+    'Blocks': blockItems,
+    'Lights': [
+      { name: 'Point Light', type: 'pointlight' },
+      { name: 'Directional Light', type: 'directionallight' },
+      { name: 'Spot Light', type: 'spotlight' }
+    ],
+    'Cameras': [
+      { name: 'Perspective Camera', type: 'perspective-camera' },
+      { name: 'Orthographic Camera', type: 'orthographic-camera' }
+    ]
+  }
+})
 
 const categoryList = computed(() => Object.keys(spawnCategories.value))
 const currentCategoryItems = computed(() => spawnCategories.value[selectedCategory.value] || [])
@@ -131,19 +160,28 @@ const closeMenu = () => {
         {{ selectedCategory }}
       </div>
       <div class="flex-1 overflow-y-auto p-1.5">
-        <button
-          v-for="item in currentCategoryItems"
-          :key="item.id || item.type"
-          @click="selectItem(item)"
-          :class="[
-            'w-full text-left px-2 py-1.5 text-xs rounded mb-0.5 transition-colors',
-            (selectedItem?.id && selectedItem?.id === item.id) || (selectedItem?.type === item.type && !item.id)
-              ? 'bg-[#3c8edb] text-white'
-              : 'text-[#aaa] hover:bg-[#333]'
-          ]"
-        >
-          {{ item.name }}
-        </button>
+        <template v-for="item in currentCategoryItems" :key="item.id || item.type">
+          <!-- Subcategory Header -->
+          <div
+            v-if="item.isHeader"
+            class="px-2 py-1 text-[10px] font-semibold text-[#888] uppercase tracking-wider mt-2 first:mt-0"
+          >
+            {{ item.name }}
+          </div>
+          <!-- Regular Item Button -->
+          <button
+            v-else
+            @click="selectItem(item)"
+            :class="[
+              'w-full text-left px-2 py-1.5 text-xs rounded mb-0.5 transition-colors',
+              (selectedItem?.id && selectedItem?.id === item.id) || (selectedItem?.type === item.type && !item.id)
+                ? 'bg-[#3c8edb] text-white'
+                : 'text-[#aaa] hover:bg-[#333]'
+            ]"
+          >
+            {{ item.name }}
+          </button>
+        </template>
       </div>
       <div class="p-1.5 border-t border-[#3c3c3c] flex justify-end gap-1.5">
         <button

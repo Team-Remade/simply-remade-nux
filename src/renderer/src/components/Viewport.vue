@@ -207,21 +207,38 @@ onMounted(() => {
       if (newSelected) {
         const mesh = meshMap.get(newSelected.id)
         if (mesh) {
+          // Helper to add outline to a mesh
+          const addOutlineToMesh = (targetMesh) => {
+            if (!targetMesh.geometry) return
+            
+            const edges = new THREE.EdgesGeometry(targetMesh.geometry, 15)
+            const lineMaterial = new THREE.LineBasicMaterial({
+              color: 0xffaa00, // Orange outline color
+              linewidth: 2
+            })
+            const outline = new THREE.LineSegments(edges, lineMaterial)
+            
+            // Add outline as a child of the mesh
+            outline.position.set(0, 0, 0)
+            outline.rotation.set(0, 0, 0)
+            outline.scale.set(1, 1, 1)
+            
+            targetMesh.add(outline)
+            selectionOutlines.push(outline)
+          }
+          
           // Create outline for selected object
-          const edges = new THREE.EdgesGeometry(mesh.geometry, 15)
-          const lineMaterial = new THREE.LineBasicMaterial({
-            color: 0xffaa00, // Orange outline color
-            linewidth: 2
-          })
-          const outline = new THREE.LineSegments(edges, lineMaterial)
-          
-          // Add outline as a child of the mesh
-          outline.position.set(0, 0, 0)
-          outline.rotation.set(0, 0, 0)
-          outline.scale.set(1, 1, 1)
-          
-          mesh.add(outline)
-          selectionOutlines.push(outline)
+          if (mesh.userData.isGroup) {
+            // For groups (element-based blocks), add outline to each child mesh
+            mesh.traverse((child) => {
+              if (child.isMesh) {
+                addOutlineToMesh(child)
+              }
+            })
+          } else {
+            // For simple meshes
+            addOutlineToMesh(mesh)
+          }
           
           // Recursively add outlines for all children
           const addChildOutlines = (obj) => {
@@ -543,8 +560,8 @@ onMounted(() => {
       // Get all meshes in the scene (excluding helpers)
       const pickableMeshes = Array.from(meshMap.values())
 
-      // Calculate intersections
-      const intersects = raycaster.intersectObjects(pickableMeshes, false)
+      // Calculate intersections (recursive = true to handle groups)
+      const intersects = raycaster.intersectObjects(pickableMeshes, true)
 
       if (intersects.length > 0) {
         // Find the scene object that corresponds to the clicked mesh

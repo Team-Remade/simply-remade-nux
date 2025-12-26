@@ -23,14 +23,48 @@ export const loadTextureFromData = async (textureData) => {
   return texture
 }
 
+// Helper function to load and merge parent models
+const loadModelWithParents = async (modelPath, window, visited = new Set()) => {
+  if (visited.has(modelPath)) {
+    console.warn('Circular parent reference detected:', modelPath)
+    return null
+  }
+  visited.add(modelPath)
+  
+  const model = await window.api.loadBlockModel(modelPath)
+  if (model.error) {
+    return null
+  }
+  
+  // If model has a parent, load and merge it
+  if (model.parent) {
+    // Convert parent reference to path
+    const parentPath = model.parent.replace('minecraft:', 'SimplyRemadeAssetsV1/assets/minecraft/models/') + '.json'
+    const parentModel = await loadModelWithParents(parentPath, window, visited)
+    
+    if (parentModel) {
+      // Merge parent into current model
+      // Parent properties are defaults, child overrides
+      return {
+        ...parentModel,
+        ...model,
+        textures: { ...parentModel.textures, ...model.textures },
+        elements: model.elements || parentModel.elements
+      }
+    }
+  }
+  
+  return model
+}
+
 // Helper function to create block mesh from Minecraft JSON model
 export const createBlockMesh = async (obj, window) => {
   try {
-    // Load the block model JSON
-    const blockModel = await window.api.loadBlockModel(obj.blockPath)
+    // Load the block model JSON with parents
+    const blockModel = await loadModelWithParents(obj.blockPath, window)
     
-    if (blockModel.error) {
-      console.error('Error loading block model:', blockModel.error)
+    if (!blockModel || blockModel.error) {
+      console.error('Error loading block model:', blockModel.error || 'Model not found')
       return null
     }
     
@@ -120,14 +154,107 @@ export const createBlockMesh = async (obj, window) => {
           const faceOrder = ['east', 'west', 'up', 'down', 'south', 'north']
           const faceMaterials = []
           
-          for (const faceName of faceOrder) {
+          // Get UV attribute for custom mapping
+          const uvAttribute = boxGeometry.attributes.uv
+          
+          for (let faceIndex = 0; faceIndex < faceOrder.length; faceIndex++) {
+            const faceName = faceOrder[faceIndex]
             const face = element.faces[faceName]
+            
             if (face && face.texture) {
               const texture = resolveTexture(face.texture)
               if (texture) {
                 // Clone texture for independent use
                 const faceTexture = texture.clone()
                 faceTexture.needsUpdate = true
+                // Use repeat wrapping to avoid edge bleeding
+                faceTexture.wrapS = THREE.RepeatWrapping
+                faceTexture.wrapT = THREE.RepeatWrapping
+                
+                // Apply UV mapping
+                const imgWidth = texture.image.width
+                const imgHeight = texture.image.height
+                
+                let u1, v1, u2, v2
+                
+                if (face.uv) {
+                  // Use explicit UV coordinates from model
+                  // Minecraft UV format: [x1, y1, x2, y2] in pixels
+                  u1 = face.uv[0] / imgWidth
+                  v1 = 1 - (face.uv[3] / imgHeight) // Bottom edge, flipped
+                  u2 = face.uv[2] / imgWidth
+                  v2 = 1 - (face.uv[1] / imgHeight) // Top edge, flipped
+                } else {
+                  // Auto-generate UV based on element dimensions
+                  // Map the element's size to the full texture (0-16 in Minecraft = 0-1 in texture)
+                  // Different calculation for each face based on which dimensions it uses
+                  const fromMC = element.from // Original 0-16 scale
+                  const toMC = element.to
+                  
+                  switch(faceName) {
+                    case 'east': // +X face, uses Z (horizontal) and Y (vertical)
+                    case 'west': // -X face, uses Z (horizontal) and Y (vertical)
+                      u1 = fromMC[2] / 16
+                      u2 = toMC[2] / 16
+                      v1 = fromMC[1] / 16 // Bottom of element
+                      v2 = toMC[1] / 16 // Top of element
+                      break
+                    case 'up': // +Y face, uses X and Z
+                      u1 = fromMC[0] / imgWidth
+                      u2 = toMC[0] / imgWidth
+                      v1 = 1 - (fromMC[2] / imgHeight)
+                      v2 = 1 - (toMC[2] / imgHeight)
+                      break
+                    case 'down': // -Y face, uses X and Z
+                      u1 = fromMC[0] / imgWidth
+                      u2 = toMC[0] / imgWidth
+                      v1 = 1 - (toMC[2] / imgHeight)
+                      v2 = 1 - (fromMC[2] / imgHeight)
+                      break
+                    case 'south': // +Z face, uses X (horizontal) and Y (vertical)
+                    case 'north': // -Z face, uses X (horizontal) and Y (vertical)
+                      u1 = fromMC[0] / 16
+                      u2 = toMC[0] / 16
+                      v1 = fromMC[1] / 16 // Bottom of element
+                      v2 = toMC[1] / 16 // Top of element
+                      break
+                  }
+                }
+                
+                // Each face of a box has 2 triangles = 4 vertices
+                // Each face starts at index faceIndex * 4
+                const startIdx = faceIndex * 4
+                
+                // Handle UV rotation if specified (0, 90, 180, 270)
+                let uvCoords =  [
+                  { u: u1, v: v2 }, // bottom-left
+                  { u: u2, v: v2 }, // bottom-right
+                  { u: u1, v: v1 }, // top-left
+                  { u: u2, v: v1 }  // top-right
+]
+                
+                if (face.rotation) {
+                  // Rotate UV coordinates
+                  // rotation is in degrees: 90 = clockwise 90°, 180 = 180°, 270 = clockwise 270° (=counter-clockwise 90°)
+                  const rotations = face.rotation / 90 // Number of 90° rotations
+                  for (let r = 0; r < rotations; r++) {
+                    // Rotate clockwise by 90 degrees: shift indices
+                    uvCoords = [
+                      uvCoords[2], // top-left -> bottom-left
+                      uvCoords[0], // bottom-left -> bottom-right
+                      uvCoords[3], // top-right -> top-left
+                      uvCoords[1]  // bottom-right -> top-right
+                    ]
+                  }
+                }
+                
+                // Set UV coordinates for this face's 4 vertices
+                uvAttribute.setXY(startIdx + 0, uvCoords[0].u, uvCoords[0].v)
+                uvAttribute.setXY(startIdx + 1, uvCoords[1].u, uvCoords[1].v)
+                uvAttribute.setXY(startIdx + 2, uvCoords[2].u, uvCoords[2].v)
+                uvAttribute.setXY(startIdx + 3, uvCoords[3].u, uvCoords[3].v)
+                
+                uvAttribute.needsUpdate = true
                 
                 faceMaterials.push(new THREE.MeshStandardMaterial({
                   map: faceTexture,
@@ -158,6 +285,42 @@ export const createBlockMesh = async (obj, window) => {
           
           // Create mesh for this element
           const elementMesh = new THREE.Mesh(boxGeometry, faceMaterials)
+          // Add scene object ID to element mesh for picking
+          elementMesh.userData.sceneObjectId = obj.id
+          
+          // Apply rotation if specified
+          if (element.rotation) {
+            const rot = element.rotation
+            // Set rotation origin
+            if (rot.origin) {
+              // Origin is in Minecraft coordinates (0-16), convert to Three.js (-0.5 to 0.5)
+              const originX = rot.origin[0] / 16 - 0.5
+              const originY = rot.origin[1] / 16 - 0.5
+              const originZ = rot.origin[2] / 16 - 0.5
+              
+              // Move mesh so rotation origin is at center
+              elementMesh.position.set(
+                centerX - originX,
+                centerY - originY,
+                centerZ - originZ
+              )
+            }
+            
+            // Apply rotation based on axis
+            const angle = (rot.angle || 0) * (Math.PI / 180) // Convert to radians
+            switch (rot.axis) {
+              case 'x':
+                elementMesh.rotation.x = angle
+                break
+              case 'y':
+                elementMesh.rotation.y = angle
+                break
+              case 'z':
+                elementMesh.rotation.z = angle
+                break
+            }
+          }
+          
           group.add(elementMesh)
         } else {
           // No face definitions - create with default material
@@ -194,7 +357,7 @@ export const createBlockMesh = async (obj, window) => {
       
       return container
     }
-    // Simplified cube models (cube_all, cube_column)
+    // Simplified cube models (cube_all, cube_column, orientable)
     else {
       // Create a cube geometry
       const geometry = new THREE.BoxGeometry(1, 1, 1)
@@ -245,6 +408,80 @@ export const createBlockMesh = async (obj, window) => {
           new THREE.MeshStandardMaterial({ map: endTexture, transparent: true, opacity: obj.opacity }),  // bottom
           new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // front
           new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity })  // back
+        ]
+      }
+      // Handle cube_bottom_top parent (grass, mycelium, etc. - different textures for top, bottom, and sides)
+      else if (blockModel.parent === 'minecraft:block/cube_bottom_top' && blockModel.textures) {
+        const topTextureData = blockModel.textures.top ? await window.api.loadTexture(blockModel.textures.top) : null
+        const bottomTextureData = blockModel.textures.bottom ? await window.api.loadTexture(blockModel.textures.bottom) : null
+        const sideTextureData = blockModel.textures.side ? await window.api.loadTexture(blockModel.textures.side) : null
+        
+        const topTexture = topTextureData ? await loadTextureFromData(topTextureData) : null
+        const bottomTexture = bottomTextureData ? await loadTextureFromData(bottomTextureData) : null
+        const sideTexture = sideTextureData ? await loadTextureFromData(sideTextureData) : null
+        
+        if (!topTexture || !bottomTexture || !sideTexture) {
+          return null
+        }
+        
+        // Create array of materials for each face of the cube
+        // Order: right, left, top, bottom, front, back
+        materials = [
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // right
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // left
+          new THREE.MeshStandardMaterial({ map: topTexture, transparent: true, opacity: obj.opacity }),   // top
+          new THREE.MeshStandardMaterial({ map: bottomTexture, transparent: true, opacity: obj.opacity }), // bottom
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // front
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity })  // back
+        ]
+      }
+      // Handle cube_top parent (jukebox, etc. - top texture on top, side texture on all other faces)
+      else if (blockModel.parent === 'minecraft:block/cube_top' && blockModel.textures) {
+        const topTextureData = blockModel.textures.top ? await window.api.loadTexture(blockModel.textures.top) : null
+        const sideTextureData = blockModel.textures.side ? await window.api.loadTexture(blockModel.textures.side) : null
+        
+        const topTexture = topTextureData ? await loadTextureFromData(topTextureData) : null
+        const sideTexture = sideTextureData ? await loadTextureFromData(sideTextureData) : null
+        
+        if (!topTexture || !sideTexture) {
+          return null
+        }
+        
+        // Create array of materials for each face of the cube
+        // Order: right, left, top, bottom, front, back
+        materials = [
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // right
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // left
+          new THREE.MeshStandardMaterial({ map: topTexture, transparent: true, opacity: obj.opacity }),  // top
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }),  // bottom
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // front
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity })  // back
+        ]
+      }
+      // Handle orientable parent (furnace, dispenser, etc. - different textures for front, side, top)
+      else if (blockModel.parent === 'minecraft:block/orientable' && blockModel.textures) {
+        const topTextureData = blockModel.textures.top ? await window.api.loadTexture(blockModel.textures.top) : null
+        const frontTextureData = blockModel.textures.front ? await window.api.loadTexture(blockModel.textures.front) : null
+        const sideTextureData = blockModel.textures.side ? await window.api.loadTexture(blockModel.textures.side) : null
+        
+        const topTexture = topTextureData ? await loadTextureFromData(topTextureData) : null
+        const frontTexture = frontTextureData ? await loadTextureFromData(frontTextureData) : null
+        const sideTexture = sideTextureData ? await loadTextureFromData(sideTextureData) : null
+        
+        if (!topTexture || !frontTexture || !sideTexture) {
+          return null
+        }
+        
+        // Create array of materials for each face of the cube
+        // Order: right(+X), left(-X), top(+Y), bottom(-Y), front(+Z), back(-Z)
+        // For orientable: sides on X faces, front on +Z, back gets side texture, top/bottom use top texture
+        materials = [
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // right (+X)
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity }), // left (-X)
+          new THREE.MeshStandardMaterial({ map: topTexture, transparent: true, opacity: obj.opacity }),   // top (+Y)
+          new THREE.MeshStandardMaterial({ map: topTexture, transparent: true, opacity: obj.opacity }),   // bottom (-Y)
+          new THREE.MeshStandardMaterial({ map: frontTexture, transparent: true, opacity: obj.opacity }), // front (+Z)
+          new THREE.MeshStandardMaterial({ map: sideTexture, transparent: true, opacity: obj.opacity })   // back (-Z)
         ]
       }
       else {
