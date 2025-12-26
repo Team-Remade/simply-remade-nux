@@ -2,9 +2,25 @@ import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 export default defineConfig({
-  main: {},
+  main: {
+    plugins: [
+      viteStaticCopy({
+        targets: [
+          {
+            src: 'src/main/SimplyRemadeAssetsV1.zip',
+            dest: '.'
+          },
+          {
+            src: 'src/main/blocks.json',
+            dest: '.'
+          }
+        ]
+      })
+    ]
+  },
   preload: {},
   renderer: {
     resolve: {

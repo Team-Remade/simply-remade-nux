@@ -10,6 +10,8 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
 asarUnpack:
   - resources/**
+  - out/main/SimplyRemadeAssetsV1.zip
+  - out/main/blocks.json
 win:
   executableName: simply-remade-nux
 nsis:

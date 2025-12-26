@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, onMounted } from 'vue'
 
 defineProps({
   show: {
@@ -16,9 +16,27 @@ const selectObject = inject('selectObject')
 
 const selectedCategory = ref('Primitives')
 const selectedItem = ref(null)
+const blocks = ref([])
+
+// Load blocks from the API
+onMounted(async () => {
+  try {
+    const blocksData = await window.api.getBlocks()
+    if (blocksData && blocksData.blocks) {
+      blocks.value = blocksData.blocks.map(block => ({
+        name: block.name,
+        type: 'block',
+        blockPath: block.path,
+        id: block.path // Use path as unique identifier
+      }))
+    }
+  } catch (error) {
+    console.error('Failed to load blocks:', error)
+  }
+})
 
 // Object categories and items
-const spawnCategories = {
+const spawnCategories = computed(() => ({
   'Primitives': [
     { name: 'Cube', type: 'cube' },
     { name: 'Sphere', type: 'sphere' },
@@ -26,6 +44,7 @@ const spawnCategories = {
     { name: 'Cone', type: 'cone' },
     { name: 'Plane', type: 'plane' }
   ],
+  'Blocks': blocks.value,
   'Lights': [
     { name: 'Point Light', type: 'pointlight' },
     { name: 'Directional Light', type: 'directionallight' },
@@ -35,10 +54,10 @@ const spawnCategories = {
     { name: 'Perspective Camera', type: 'perspective-camera' },
     { name: 'Orthographic Camera', type: 'orthographic-camera' }
   ]
-}
+}))
 
-const categoryList = computed(() => Object.keys(spawnCategories))
-const currentCategoryItems = computed(() => spawnCategories[selectedCategory.value] || [])
+const categoryList = computed(() => Object.keys(spawnCategories.value))
+const currentCategoryItems = computed(() => spawnCategories.value[selectedCategory.value] || [])
 
 // Function to select an item
 const selectItem = (item) => {
@@ -61,6 +80,12 @@ const createObject = () => {
     parent: null,
     expanded: false
   }
+  
+  // Add blockPath if it's a block
+  if (selectedItem.value.blockPath) {
+    newObject.blockPath = selectedItem.value.blockPath
+  }
+  
   sceneObjects.value.push(newObject)
   selectObject(newObject)
   emit('spawn', newObject)
@@ -108,11 +133,11 @@ const closeMenu = () => {
       <div class="flex-1 overflow-y-auto p-1.5">
         <button
           v-for="item in currentCategoryItems"
-          :key="item.type"
+          :key="item.id || item.type"
           @click="selectItem(item)"
           :class="[
             'w-full text-left px-2 py-1.5 text-xs rounded mb-0.5 transition-colors',
-            selectedItem?.type === item.type
+            (selectedItem?.id && selectedItem?.id === item.id) || (selectedItem?.type === item.type && !item.id)
               ? 'bg-[#3c8edb] text-white'
               : 'text-[#aaa] hover:bg-[#333]'
           ]"

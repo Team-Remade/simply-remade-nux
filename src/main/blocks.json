@@ -1,0 +1,184 @@
+{
+  "blocks": [
+    {
+      "name": "Bed",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/bed.json"
+    },
+    {
+      "name": "Bedrock",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/bedrock.json"
+    },
+    {
+      "name": "Bookshelf",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/bookshelf.json"
+    },
+    {
+      "name": "Bricks",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/bricks.json"
+    },
+    {
+      "name": "Cactus",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/cactus.json"
+    },
+    {
+      "name": "Cake",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/cake.json"
+    },
+    {
+      "name": "Cauldron",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/cauldron.json"
+    },
+    {
+      "name": "Chest",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/chest.json"
+    },
+    {
+      "name": "Clay",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/clay.json"
+    },
+    {
+      "name": "Cobblestone",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/cobblestone.json"
+    },
+    {
+      "name": "Cobweb",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/cobweb.json"
+    },
+    {
+      "name": "Dandelion",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dandelion.json"
+    },
+    {
+      "name": "Dirt",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dirt.json"
+    },
+    {
+      "name": "Dispenser",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser.json"
+    },
+    {
+      "name": "Farmland",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/farmland.json"
+    },
+    {
+      "name": "Fern",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/fern.json"
+    },
+    {
+      "name": "Furnace",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/furnace.json"
+    },
+    {
+      "name": "Glass",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/glass.json"
+    },
+    {
+      "name": "Glowstone",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/glowstone.json"
+    },
+    {
+      "name": "Grass",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/grass.json"
+    },
+    {
+      "name": "Gravel",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/gravel.json"
+    },
+    {
+      "name": "Ice",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/ice.json"
+    },
+    {
+      "name": "Jukebox",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/jukebox.json"
+    },
+    {
+      "name": "Ladder",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/ladder.json"
+    },
+    {
+      "name": "Lava",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/lava.json"
+    },
+    {
+      "name": "Leaves",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/leaves.json"
+    },
+    {
+      "name": "Lever",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/lever.json"
+    },
+    {
+      "name": "Melon",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/melon.json"
+    },
+    {
+      "name": "Mycelium",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/mycelium.json"
+    },
+    {
+      "name": "Netherrack",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/netherrack.json"
+    },
+    {
+      "name": "Obsidian",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/obsidian.json"
+    },
+    {
+      "name": "Piston",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/piston.json"
+    },
+    {
+      "name": "Pumpkin",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/pumpkin.json"
+    },
+    {
+      "name": "Rail",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rail.json"
+    },
+    {
+      "name": "Rose",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rose.json"
+    },
+    {
+      "name": "Sand",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/sand.json"
+    },
+    {
+      "name": "Sandstone",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/sandstone.json"
+    },
+    {
+      "name": "Spawner",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/spawner.json"
+    },
+    {
+      "name": "Sponge",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/sponge.json"
+    },
+    {
+      "name": "Stairs",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/stairs.json"
+    },
+    {
+      "name": "Stone",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/stone.json"
+    },
+    {
+      "name": "TNT",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/tnt.json"
+    },
+    {
+      "name": "Torch",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/torch.json"
+    },
+    {
+      "name": "Vine",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/vine.json"
+    },
+    {
+      "name": "Water",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/water.json"
+    }
+  ]
+}

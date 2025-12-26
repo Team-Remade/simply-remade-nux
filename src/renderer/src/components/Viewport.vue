@@ -385,6 +385,91 @@ onMounted(() => {
       return allObjects
     }
 
+    // Helper function to load and create block mesh
+    const createBlockMesh = async (obj) => {
+      try {
+        // Load the block model JSON
+        const blockModel = await window.api.loadBlockModel(obj.blockPath)
+        
+        if (blockModel.error) {
+          console.error('Error loading block model:', blockModel.error)
+          return null
+        }
+        
+        // For now, handle cube_all parent (full cube blocks)
+        if (blockModel.parent === 'minecraft:block/cube_all' && blockModel.textures && blockModel.textures.all) {
+          // Load the texture
+          const textureData = await window.api.loadTexture(blockModel.textures.all)
+          
+          if (textureData.error) {
+            console.error('Error loading texture:', textureData.error)
+            return null
+          }
+          
+          // Create a cube geometry
+          const geometry = new THREE.BoxGeometry(1, 1, 1)
+          
+          // Initialize opacity if not set
+          if (obj.opacity === undefined) {
+            obj.opacity = 1
+          }
+          
+          // Initialize pivot offset if not set
+          if (obj.pivotOffset === undefined) {
+            obj.pivotOffset = { x: 0, y: -0.5, z: 0 }
+          }
+          
+          // Create texture from base64 data
+          const image = new Image()
+          image.src = 'data:image/png;base64,' + textureData.data
+          
+          await new Promise((resolve, reject) => {
+            image.onload = resolve
+            image.onerror = reject
+          })
+          
+          const texture = new THREE.Texture(image)
+          texture.needsUpdate = true
+          texture.magFilter = THREE.NearestFilter
+          texture.minFilter = THREE.NearestFilter
+          
+          // Create material with texture
+          const material = new THREE.MeshStandardMaterial({
+            map: texture,
+            transparent: true,
+            opacity: obj.opacity
+          })
+          
+          const mesh = new THREE.Mesh(geometry, material)
+          
+          // Apply pivot offset to geometry (inverted)
+          geometry.translate(
+            -obj.pivotOffset.x,
+            -obj.pivotOffset.y,
+            -obj.pivotOffset.z
+          )
+          
+          mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
+          mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
+          mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+          
+          // Store reference to scene object for picking
+          mesh.userData.sceneObjectId = obj.id
+          // Store initial pivot offset for change tracking
+          mesh.userData.pivotOffset = { ...obj.pivotOffset }
+          
+          return mesh
+        }
+        
+        // Fallback to a placeholder cube if we can't load the model
+        console.warn('Unsupported block model format, using placeholder')
+        return null
+      } catch (error) {
+        console.error('Error creating block mesh:', error)
+        return null
+      }
+    }
+
     // Watch for changes in sceneObjects
     watch(sceneObjects, (newObjects) => {
       // Collect all objects including nested children
@@ -393,7 +478,26 @@ onMounted(() => {
       // Add any new objects that don't have a mesh yet
       allObjects.forEach(obj => {
         if (!meshMap.has(obj.id)) {
-          if (obj.type === 'cube') {
+          if (obj.type === 'block' && obj.blockPath) {
+            // Handle block type - async creation
+            createBlockMesh(obj).then(mesh => {
+              if (mesh && !meshMap.has(obj.id)) {
+                // Add to scene or parent mesh
+                if (obj.parent) {
+                  const parentMesh = meshMap.get(obj.parent)
+                  if (parentMesh) {
+                    parentMesh.add(mesh)
+                  } else {
+                    scene.add(mesh)
+                  }
+                } else {
+                  scene.add(mesh)
+                }
+                
+                meshMap.set(obj.id, mesh)
+              }
+            })
+          } else if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
             
             // Initialize opacity if not set
