@@ -399,8 +399,30 @@ onMounted(() => {
         if (!meshMap.has(obj.id)) {
           if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
-            const material = new THREE.MeshStandardMaterial({ color: 0xffffff })
+            
+            // Initialize opacity if not set
+            if (obj.opacity === undefined) {
+              obj.opacity = 1
+            }
+            
+            // Initialize pivot offset if not set
+            if (obj.pivotOffset === undefined) {
+              obj.pivotOffset = { x: 0, y: -0.5, z: 0 }
+            }
+            
+            const material = new THREE.MeshStandardMaterial({
+              color: 0xffffff,
+              transparent: true,
+              opacity: obj.opacity
+            })
             const mesh = new THREE.Mesh(geometry, material)
+            
+            // Apply pivot offset to geometry (inverted)
+            geometry.translate(
+              -obj.pivotOffset.x,
+              -obj.pivotOffset.y,
+              -obj.pivotOffset.z
+            )
             
             mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
             mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
@@ -408,6 +430,8 @@ onMounted(() => {
             
             // Store reference to scene object for picking
             mesh.userData.sceneObjectId = obj.id
+            // Store initial pivot offset for change tracking
+            mesh.userData.pivotOffset = { ...obj.pivotOffset }
             
             // Add to scene or parent mesh
             if (obj.parent) {
@@ -726,7 +750,7 @@ onMounted(() => {
       }
 
       // Update mesh transforms from scene objects (including nested children)
-      const updateMeshTransforms = (objects) => {
+      const updateMeshTransforms = (objects, parentOpacity = 1) => {
         objects.forEach(obj => {
           const mesh = meshMap.get(obj.id)
           if (mesh) {
@@ -734,12 +758,73 @@ onMounted(() => {
             mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
             mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
             
+            // Update material opacity - multiply with parent opacity for propagation
+            const objectOpacity = obj.opacity !== undefined ? obj.opacity : 1
+            const finalOpacity = objectOpacity * parentOpacity
+            
+            if (mesh.material) {
+              mesh.material.opacity = finalOpacity
+              mesh.material.transparent = true
+            }
+            
+            // Check if pivot offset has changed and update geometry if needed
+            const pivotOffset = obj.pivotOffset || { x: 0, y: -0.5, z: 0 }
+            const currentPivot = mesh.userData.pivotOffset || { x: 0, y: -0.5, z: 0 }
+            
+            if (pivotOffset.x !== currentPivot.x ||
+                pivotOffset.y !== currentPivot.y ||
+                pivotOffset.z !== currentPivot.z) {
+              // Dispose old geometry and create new one with correct pivot offset
+              mesh.geometry.dispose()
+              const newGeometry = new THREE.BoxGeometry(1, 1, 1)
+              newGeometry.translate(-pivotOffset.x, -pivotOffset.y, -pivotOffset.z)
+              mesh.geometry = newGeometry
+              
+              // Store current pivot offset
+              mesh.userData.pivotOffset = { ...pivotOffset }
+              
+              // Update outline if this object is selected
+              if (selectedObject.value && selectedObject.value.id === obj.id) {
+                // Find and update the outline for this mesh
+                const outline = selectionOutlines.find(o => o.parent === mesh)
+                if (outline) {
+                  // Remove old outline
+                  mesh.remove(outline)
+                  outline.geometry.dispose()
+                  outline.material.dispose()
+                  
+                  // Create new outline with updated geometry
+                  const edges = new THREE.EdgesGeometry(mesh.geometry, 15)
+                  const lineMaterial = new THREE.LineBasicMaterial({
+                    color: 0xffaa00,
+                    linewidth: 2
+                  })
+                  const newOutline = new THREE.LineSegments(edges, lineMaterial)
+                  newOutline.position.set(0, 0, 0)
+                  newOutline.rotation.set(0, 0, 0)
+                  newOutline.scale.set(1, 1, 1)
+                  mesh.add(newOutline)
+                  
+                  // Replace in selectionOutlines array
+                  const index = selectionOutlines.indexOf(outline)
+                  if (index > -1) {
+                    selectionOutlines[index] = newOutline
+                  }
+                }
+              }
+            }
+            
             // Outline is now a child of the mesh, so it follows automatically
-          }
-          
-          // Recursively update children
-          if (obj.children && obj.children.length > 0) {
-            updateMeshTransforms(obj.children)
+            
+            // Recursively update children with combined opacity
+            if (obj.children && obj.children.length > 0) {
+              updateMeshTransforms(obj.children, finalOpacity)
+            }
+          } else {
+            // If mesh doesn't exist yet but has children, still propagate opacity
+            if (obj.children && obj.children.length > 0) {
+              updateMeshTransforms(obj.children, parentOpacity)
+            }
           }
         })
       }

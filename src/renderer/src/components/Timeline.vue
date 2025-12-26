@@ -59,7 +59,8 @@ const syncScrollRight = (event) => {
 const propertyTracks = [
   { prop: 'position', label: 'Position', axis: ['x', 'y', 'z'], color: '#e74c3c' },
   { prop: 'rotation', label: 'Rotation', axis: ['x', 'y', 'z'], color: '#3498db' },
-  { prop: 'scale', label: 'Scale', axis: ['x', 'y', 'z'], color: '#2ecc71' }
+  { prop: 'scale', label: 'Scale', axis: ['x', 'y', 'z'], color: '#2ecc71' },
+  { prop: 'opacity', label: 'Opacity', axis: null, color: '#f39c12' }
 ]
 
 // Animation playback state
@@ -150,40 +151,74 @@ const ensureKeyframeStructure = (obj) => {
     obj.keyframes = {
       position: { x: [], y: [], z: [] },
       rotation: { x: [], y: [], z: [] },
-      scale: { x: [], y: [], z: [] }
+      scale: { x: [], y: [], z: [] },
+      opacity: []
     }
   }
   if (!obj.keyframeValues) {
     obj.keyframeValues = {
       position: { x: {}, y: {}, z: {} },
       rotation: { x: {}, y: {}, z: {} },
-      scale: { x: {}, y: {}, z: {} }
+      scale: { x: {}, y: {}, z: {} },
+      opacity: {}
     }
   }
 }
 
-// Add keyframe for a specific property and axis
+// Add keyframe for a specific property and axis (or single-value property)
 const addKeyframe = (obj, property, axis, frame) => {
   ensureKeyframeStructure(obj)
   
-  if (!obj.keyframes[property][axis].includes(frame)) {
-    obj.keyframes[property][axis].push(frame)
-    obj.keyframes[property][axis].sort((a, b) => a - b)
-    
-    // Store the current value for this keyframe
-    obj.keyframeValues[property][axis][frame] = obj[property][axis]
+  // Handle single-value properties (like opacity)
+  if (axis === null || axis === undefined) {
+    if (!obj.keyframes[property].includes(frame)) {
+      obj.keyframes[property].push(frame)
+      obj.keyframes[property].sort((a, b) => a - b)
+      
+      // Initialize opacity if not set
+      if (obj[property] === undefined) {
+        obj[property] = 1
+      }
+      
+      // Store the current value for this keyframe
+      obj.keyframeValues[property][frame] = obj[property]
+    }
+  } else {
+    // Handle multi-axis properties
+    if (!obj.keyframes[property][axis].includes(frame)) {
+      obj.keyframes[property][axis].push(frame)
+      obj.keyframes[property][axis].sort((a, b) => a - b)
+      
+      // Store the current value for this keyframe
+      obj.keyframeValues[property][axis][frame] = obj[property][axis]
+    }
   }
 }
 
 // Remove keyframe
 const removeKeyframe = (obj, property, axis, frame) => {
-  if (obj.keyframes?.[property]?.[axis]) {
-    const index = obj.keyframes[property][axis].indexOf(frame)
-    if (index > -1) {
-      obj.keyframes[property][axis].splice(index, 1)
-      // Remove stored value
-      if (obj.keyframeValues?.[property]?.[axis]?.[frame] !== undefined) {
-        delete obj.keyframeValues[property][axis][frame]
+  // Handle single-value properties
+  if (axis === null || axis === undefined) {
+    if (obj.keyframes?.[property]) {
+      const index = obj.keyframes[property].indexOf(frame)
+      if (index > -1) {
+        obj.keyframes[property].splice(index, 1)
+        // Remove stored value
+        if (obj.keyframeValues?.[property]?.[frame] !== undefined) {
+          delete obj.keyframeValues[property][frame]
+        }
+      }
+    }
+  } else {
+    // Handle multi-axis properties
+    if (obj.keyframes?.[property]?.[axis]) {
+      const index = obj.keyframes[property][axis].indexOf(frame)
+      if (index > -1) {
+        obj.keyframes[property][axis].splice(index, 1)
+        // Remove stored value
+        if (obj.keyframeValues?.[property]?.[axis]?.[frame] !== undefined) {
+          delete obj.keyframeValues[property][axis][frame]
+        }
       }
     }
   }
@@ -196,11 +231,21 @@ const addKeyframeAtCurrentFrame = (obj, property, axis) => {
 
 // Check if keyframe exists at frame
 const hasKeyframe = (obj, property, axis, frame) => {
+  // Handle single-value properties
+  if (axis === null || axis === undefined) {
+    return obj.keyframes?.[property]?.includes(frame) || false
+  }
+  // Handle multi-axis properties
   return obj.keyframes?.[property]?.[axis]?.includes(frame) || false
 }
 
 // Get all keyframes for a property/axis
 const getKeyframes = (obj, property, axis) => {
+  // Handle single-value properties
+  if (axis === null || axis === undefined) {
+    return obj.keyframes?.[property] || []
+  }
+  // Handle multi-axis properties
   return obj.keyframes?.[property]?.[axis] || []
 }
 
@@ -269,7 +314,10 @@ const handleKeyframeDragMove = (event) => {
       break
     }
     
-    const frameList = kf.obj.keyframes[kf.property][kf.axis]
+    // Handle single-value properties vs multi-axis properties
+    const frameList = kf.axis === null || kf.axis === undefined
+      ? kf.obj.keyframes[kf.property]
+      : kf.obj.keyframes[kf.property][kf.axis]
     
     // Check if target frame is occupied by a non-dragging keyframe
     const targetFrameExists = frameList.includes(targetFrame) &&
@@ -298,7 +346,10 @@ const handleKeyframeDragMove = (event) => {
   if (allMovesValid && movesToMake.length > 0) {
     // Remove all keyframes from old positions first
     for (const move of movesToMake) {
-      const frameList = move.obj.keyframes[move.property][move.axis]
+      // Handle single-value properties vs multi-axis properties
+      const frameList = move.axis === null || move.axis === undefined
+        ? move.obj.keyframes[move.property]
+        : move.obj.keyframes[move.property][move.axis]
       const index = frameList.indexOf(move.originalFrame)
       if (index > -1) {
         frameList.splice(index, 1)
@@ -307,14 +358,24 @@ const handleKeyframeDragMove = (event) => {
     
     // Add all keyframes at new positions
     for (const move of movesToMake) {
-      const frameList = move.obj.keyframes[move.property][move.axis]
-      const value = move.obj.keyframeValues[move.property][move.axis][move.originalFrame]
+      // Handle single-value properties vs multi-axis properties
+      const frameList = move.axis === null || move.axis === undefined
+        ? move.obj.keyframes[move.property]
+        : move.obj.keyframes[move.property][move.axis]
+      const value = move.axis === null || move.axis === undefined
+        ? move.obj.keyframeValues[move.property][move.originalFrame]
+        : move.obj.keyframeValues[move.property][move.axis][move.originalFrame]
       
-      delete move.obj.keyframeValues[move.property][move.axis][move.originalFrame]
+      if (move.axis === null || move.axis === undefined) {
+        delete move.obj.keyframeValues[move.property][move.originalFrame]
+        move.obj.keyframeValues[move.property][move.targetFrame] = value
+      } else {
+        delete move.obj.keyframeValues[move.property][move.axis][move.originalFrame]
+        move.obj.keyframeValues[move.property][move.axis][move.targetFrame] = value
+      }
       
       frameList.push(move.targetFrame)
       frameList.sort((a, b) => a - b)
-      move.obj.keyframeValues[move.property][move.axis][move.targetFrame] = value
     }
     
     // Update drag state
@@ -615,9 +676,10 @@ const updateObjectValues = () => {
     
     // For each property with keyframes, update the object's property
     propertyTracks.forEach(track => {
-      track.axis.forEach(axis => {
-        const keyframes = obj.keyframes[track.prop]?.[axis]
-        const keyframeValues = obj.keyframeValues[track.prop]?.[axis]
+      // Handle single-value properties (like opacity)
+      if (track.axis === null) {
+        const keyframes = obj.keyframes[track.prop]
+        const keyframeValues = obj.keyframeValues[track.prop]
         
         if (!keyframes || keyframes.length === 0) return
         
@@ -636,7 +698,7 @@ const updateObjectValues = () => {
         
         // If at exact keyframe, use that value
         if (prevFrame === currentFrame.value && keyframeValues[prevFrame] !== undefined) {
-          obj[track.prop][axis] = keyframeValues[prevFrame]
+          obj[track.prop] = keyframeValues[prevFrame]
         }
         // If between keyframes, interpolate
         else if (prevFrame !== null && nextFrame !== null && prevFrame !== nextFrame) {
@@ -646,14 +708,55 @@ const updateObjectValues = () => {
           if (prevValue !== undefined && nextValue !== undefined) {
             // Linear interpolation
             const t = (currentFrame.value - prevFrame) / (nextFrame - prevFrame)
-            obj[track.prop][axis] = prevValue + (nextValue - prevValue) * t
+            obj[track.prop] = prevValue + (nextValue - prevValue) * t
           }
         }
         // If before first keyframe or after last keyframe
-        else if (prevFrame !== null && keyframeValues[prevFrame] !== undefined) {
-          obj[track.prop][axis] = keyframeValues[prevFrame]
+        else if (prevFrame !==null && keyframeValues[prevFrame] !== undefined) {
+          obj[track.prop] = keyframeValues[prevFrame]
         }
-      })
+      } else {
+        // Handle multi-axis properties
+        track.axis.forEach(axis => {
+          const keyframes = obj.keyframes[track.prop]?.[axis]
+          const keyframeValues = obj.keyframeValues[track.prop]?.[axis]
+          
+          if (!keyframes || keyframes.length === 0) return
+          
+          // Find surrounding keyframes
+          let prevFrame = null
+          let nextFrame = null
+          
+          for (let i = 0; i < keyframes.length; i++) {
+            if (keyframes[i] <= currentFrame.value) {
+              prevFrame = keyframes[i]
+            }
+            if (keyframes[i] >= currentFrame.value && nextFrame === null) {
+              nextFrame = keyframes[i]
+            }
+          }
+          
+          // If at exact keyframe, use that value
+          if (prevFrame === currentFrame.value && keyframeValues[prevFrame] !== undefined) {
+            obj[track.prop][axis] = keyframeValues[prevFrame]
+          }
+          // If between keyframes, interpolate
+          else if (prevFrame !== null && nextFrame !== null && prevFrame !== nextFrame) {
+            const prevValue = keyframeValues[prevFrame]
+            const nextValue = keyframeValues[nextFrame]
+            
+            if (prevValue !== undefined && nextValue !== undefined) {
+              // Linear interpolation
+              const t = (currentFrame.value - prevFrame) / (nextFrame - prevFrame)
+              obj[track.prop][axis] = prevValue + (nextValue - prevValue) * t
+            }
+          }
+          // If before first keyframe or after last keyframe
+          else if (prevFrame !== null && keyframeValues[prevFrame] !== undefined) {
+            obj[track.prop][axis] = keyframeValues[prevFrame]
+          }
+        })
+      }
     })
   })
 }
@@ -750,29 +853,15 @@ onUnmounted(() => {
             <!-- Property tracks (when expanded) -->
             <template v-if="isObjectExpanded(selectedObject.id)">
               <div v-for="track in propertyTracks" :key="`${selectedObject.id}-${track.prop}`">
-                <div
-                  class="h-6 flex items-center pl-8 pr-3 text-[#999] text-[11px] border-b border-[#1a1a1a] bg-[#202020]"
-                >
-                  <button
-                    @click.stop="togglePropertyAxes(selectedObject.id, track.prop)"
-                    class="w-4 h-4 flex items-center justify-center mr-1 hover:bg-[#3c3c3c] rounded"
-                    :title="arePropertyAxesExpanded(selectedObject.id, track.prop) ? 'Collapse to XYZ' : 'Expand to X, Y, Z'"
-                  >
-                    <i :class="arePropertyAxesExpanded(selectedObject.id, track.prop) ? 'bi bi-chevron-down' : 'bi bi-chevron-right'" class="text-[8px]"></i>
-                  </button>
-                  <span :style="{ color: track.color }">{{ track.label }}</span>
-                </div>
-                <!-- Individual axis tracks (only shown when expanded) -->
-                <template v-if="arePropertyAxesExpanded(selectedObject.id, track.prop)">
+                <!-- Single-value property (opacity) -->
+                <template v-if="track.axis === null">
                   <div
-                    v-for="axis in track.axis"
-                    :key="`${selectedObject.id}-${track.prop}-${axis}`"
-                    class="h-6 flex items-center pl-12 pr-3 text-[#888] text-[10px] border-b border-[#1a1a1a] bg-[#1a1a1a] hover:bg-[#252525] cursor-pointer group"
+                    class="h-6 flex items-center pl-8 pr-3 text-[#888] text-[10px] border-b border-[#1a1a1a] bg-[#1a1a1a] hover:bg-[#252525] cursor-pointer group"
                     @click.stop
                   >
-                    <span class="uppercase">{{ axis }}</span>
+                    <span :style="{ color: track.color }">{{ track.label }}</span>
                     <button
-                      @click="addKeyframeAtCurrentFrame(selectedObject, track.prop, axis)"
+                      @click="addKeyframeAtCurrentFrame(selectedObject, track.prop, null)"
                       class="ml-auto px-2 py-0.5 text-[9px] bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded opacity-0 group-hover:opacity-100 transition-opacity"
                       title="Add keyframe at current frame"
                     >
@@ -780,21 +869,55 @@ onUnmounted(() => {
                     </button>
                   </div>
                 </template>
-                <!-- Combined axis option (only shown when collapsed) -->
-                <div
-                  v-if="!arePropertyAxesExpanded(selectedObject.id, track.prop)"
-                  class="h-6 flex items-center pl-12 pr-3 text-[#888] text-[10px] border-b border-[#1a1a1a] bg-[#1a1a1a] hover:bg-[#252525] cursor-pointer group"
-                  @click.stop
-                >
-                  <span class="uppercase">XYZ</span>
-                  <button
-                    @click="['x', 'y', 'z'].forEach(a => addKeyframeAtCurrentFrame(selectedObject, track.prop, a))"
-                    class="ml-auto px-2 py-0.5 text-[9px] bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Add keyframe for all axes"
+                
+                <!-- Multi-axis property (position, rotation, scale) -->
+                <template v-else>
+                  <div
+                    class="h-6 flex items-center pl-8 pr-3 text-[#999] text-[11px] border-b border-[#1a1a1a] bg-[#202020]"
                   >
-                    <i class="bi bi-plus-circle"></i>
-                  </button>
-                </div>
+                    <button
+                      @click.stop="togglePropertyAxes(selectedObject.id, track.prop)"
+                      class="w-4 h-4 flex items-center justify-center mr-1 hover:bg-[#3c3c3c] rounded"
+                      :title="arePropertyAxesExpanded(selectedObject.id, track.prop) ? 'Collapse to XYZ' : 'Expand to X, Y, Z'"
+                    >
+                      <i :class="arePropertyAxesExpanded(selectedObject.id, track.prop) ? 'bi bi-chevron-down' : 'bi bi-chevron-right'" class="text-[8px]"></i>
+                    </button>
+                    <span :style="{ color: track.color }">{{ track.label }}</span>
+                  </div>
+                  <!-- Individual axis tracks (only shown when expanded) -->
+                  <template v-if="arePropertyAxesExpanded(selectedObject.id, track.prop)">
+                    <div
+                      v-for="axis in track.axis"
+                      :key="`${selectedObject.id}-${track.prop}-${axis}`"
+                      class="h-6 flex items-center pl-12 pr-3 text-[#888] text-[10px] border-b border-[#1a1a1a] bg-[#1a1a1a] hover:bg-[#252525] cursor-pointer group"
+                      @click.stop
+                    >
+                      <span class="uppercase">{{ axis }}</span>
+                      <button
+                        @click="addKeyframeAtCurrentFrame(selectedObject, track.prop, axis)"
+                        class="ml-auto px-2 py-0.5 text-[9px] bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Add keyframe at current frame"
+                      >
+                        <i class="bi bi-plus-circle"></i>
+                      </button>
+                    </div>
+                  </template>
+                  <!-- Combined axis option (only shown when collapsed) -->
+                  <div
+                    v-if="!arePropertyAxesExpanded(selectedObject.id, track.prop)"
+                    class="h-6 flex items-center pl-12 pr-3 text-[#888] text-[10px] border-b border border-[#1a1a1a] bg-[#1a1a1a] hover:bg-[#252525] cursor-pointer group"
+                    @click.stop
+                  >
+                    <span class="uppercase">XYZ</span>
+                    <button
+                      @click="['x', 'y', 'z'].forEach(a => addKeyframeAtCurrentFrame(selectedObject, track.prop, a))"
+                      class="ml-auto px-2 py-0.5 text-[9px] bg-[#3c3c3c] hover:bg-[#4c4c4c] rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Add keyframe for all axes"
+                    >
+                      <i class="bi bi-plus-circle"></i>
+                    </button>
+                  </div>
+                </template>
               </div>
             </template>
           </template>
@@ -854,23 +977,16 @@ onUnmounted(() => {
             <!-- Property tracks (when expanded) -->
             <template v-if="isObjectExpanded(selectedObject.id)">
               <div v-for="track in propertyTracks" :key="`${selectedObject.id}-${track.prop}-track`">
-                <!-- Property header row -->
-                <div class="relative h-6 border-b border-[#1a1a1a] bg-[#202020]"></div>
-                
-                <!-- Individual axis tracks (only shown when expanded) -->
-                <template v-if="arePropertyAxesExpanded(selectedObject.id, track.prop)">
-                  <div
-                    v-for="axis in track.axis"
-                    :key="`${selectedObject.id}-${track.prop}-${axis}-track`"
-                    class="relative h-6 border-b border-[#1a1a1a] bg-[#1a1a1a]"
-                  >
-                    <!-- Keyframe markers -->
+                <!-- Single-value property (opacity) -->
+                <template v-if="track.axis === null">
+                  <div class="relative h-6 border-b border-[#1a1a1a] bg-[#1a1a1a]">
+                    <!-- Keyframe markers for opacity -->
                     <i
-                      v-for="(keyframe, idx) in getKeyframes(selectedObject, track.prop, axis)"
+                      v-for="(keyframe, idx) in getKeyframes(selectedObject, track.prop, null)"
                       :key="idx"
                       :class="[
                         'bi',
-                        isKeyframeSelected(selectedObject, track.prop, axis, keyframe) ? 'bi-diamond' : 'bi-diamond-fill',
+                        isKeyframeSelected(selectedObject, track.prop, null, keyframe) ? 'bi-diamond' : 'bi-diamond-fill',
                         'keyframe-marker absolute top-1/2 -translate-y-1/2 cursor-pointer transition-transform'
                       ]"
                       :style="{
@@ -879,48 +995,83 @@ onUnmounted(() => {
                         color: track.color,
                         fontSize: '12px'
                       }"
-                      :title="`${track.label}.${axis.toUpperCase()} @ Frame ${keyframe} - Drag to move, Click to select, Shift+Click to multi-select, Delete to remove`"
-                      @mousedown.stop="(e) => { if (e.button === 0) startKeyframeDrag(selectedObject, track.prop, axis, keyframe, e) }"
-                      @click.stop="(e) => selectKeyframe(selectedObject, track.prop, axis, keyframe, e)"
+                      :title="`${track.label} @ Frame ${keyframe} - Drag to move, Click to select, Shift+Click to multi-select, Delete to remove`"
+                      @mousedown.stop="(e) => { if (e.button === 0) startKeyframeDrag(selectedObject, track.prop, null, keyframe, e) }"
+                      @click.stop="(e) => selectKeyframe(selectedObject, track.prop, null, keyframe, e)"
                     ></i>
                   </div>
                 </template>
                 
-                <!-- Combined axis track (only shown when collapsed) -->
-                <div v-if="!arePropertyAxesExpanded(selectedObject.id, track.prop)" class="relative h-6 border-b border-[#1a1a1a] bg-[#1a1a1a]">
-                  <!-- Show keyframes when ANY axis has a keyframe -->
-                  <template v-if="selectedObject.keyframes?.[track.prop]">
-                    <i
-                      v-for="frame in [...new Set([
-                        ...getKeyframes(selectedObject, track.prop, 'x'),
-                        ...getKeyframes(selectedObject, track.prop, 'y'),
-                        ...getKeyframes(selectedObject, track.prop, 'z')
-                      ])]"
-                      :key="frame"
-                      :class="[
-                        'bi',
-                        (isKeyframeSelected(selectedObject, track.prop, 'x', frame) ||
-                         isKeyframeSelected(selectedObject, track.prop, 'y', frame) ||
-                         isKeyframeSelected(selectedObject, track.prop, 'z', frame)) ? 'bi-diamond' : 'bi-diamond-fill',
-                        'keyframe-marker absolute top-1/2 -translate-y-1/2 cursor-pointer transition-transform'
-                      ]"
-                      :style="{
-                        left: `${(frame / totalFrames) * 100}%`,
-                        marginLeft: '-6px',
-                        color: track.color,
-                        fontSize: hasKeyframe(selectedObject, track.prop, 'x', frame) && hasKeyframe(selectedObject, track.prop, 'y', frame) && hasKeyframe(selectedObject, track.prop, 'z', frame) ? '14px' : '12px',
-                        fontWeight: hasKeyframe(selectedObject, track.prop, 'x', frame) && hasKeyframe(selectedObject, track.prop, 'y', frame) && hasKeyframe(selectedObject, track.prop, 'z', frame) ? 'bold' : 'normal'
-                      }"
-                      :title="`${track.label} @ Frame ${frame} - ${[
-                        hasKeyframe(selectedObject, track.prop, 'x', frame) ? 'X' : null,
-                        hasKeyframe(selectedObject, track.prop, 'y', frame) ? 'Y' : null,
-                        hasKeyframe(selectedObject, track.prop, 'z', frame) ? 'Z' : null
-                      ].filter(Boolean).join(', ')}`"
-                      @mousedown.stop="(e) => { if (e.button === 0) { const firstAxis = hasKeyframe(selectedObject, track.prop, 'x', frame) ? 'x' : hasKeyframe(selectedObject, track.prop, 'y', frame) ? 'y' : 'z'; startKeyframeDrag(selectedObject, track.prop, firstAxis, frame, e) } }"
-                      @click.stop="(e) => { const firstAxis = hasKeyframe(selectedObject, track.prop, 'x', frame) ? 'x' : hasKeyframe(selectedObject, track.prop, 'y', frame) ? 'y' : 'z'; selectKeyframe(selectedObject, track.prop, firstAxis, frame, e) }"
-                    ></i>
+                <!-- Multi-axis property (position, rotation, scale) -->
+                <template v-else>
+                  <!-- Property header row -->
+                  <div class="relative h-6 border-b border-[#1a1a1a] bg-[#202020]"></div>
+                  
+                  <!-- Individual axis tracks (only shown when expanded) -->
+                  <template v-if="arePropertyAxesExpanded(selectedObject.id, track.prop)">
+                    <div
+                      v-for="axis in track.axis"
+                      :key="`${selectedObject.id}-${track.prop}-${axis}-track`"
+                      class="relative h-6 border-b border-[#1a1a1a] bg-[#1a1a1a]"
+                    >
+                      <!-- Keyframe markers -->
+                      <i
+                        v-for="(keyframe, idx) in getKeyframes(selectedObject, track.prop, axis)"
+                        :key="idx"
+                        :class="[
+                          'bi',
+                          isKeyframeSelected(selectedObject, track.prop, axis, keyframe) ? 'bi-diamond' : 'bi-diamond-fill',
+                          'keyframe-marker absolute top-1/2 -translate-y-1/2 cursor-pointer transition-transform'
+                        ]"
+                        :style="{
+                         left: `${(keyframe / totalFrames) * 100}%`,
+                          marginLeft: '-6px',
+                          color: track.color,
+                          fontSize: '12px'
+                        }"
+                        :title="`${track.label}.${axis.toUpperCase()} @ Frame ${keyframe} - Drag to move, Click to select, Shift+Click to multi-select, Delete to remove`"
+                        @mousedown.stop="(e) => { if (e.button === 0) startKeyframeDrag(selectedObject, track.prop, axis, keyframe, e) }"
+                        @click.stop="(e) => selectKeyframe(selectedObject, track.prop, axis, keyframe, e)"
+                      ></i>
+                    </div>
                   </template>
-                </div>
+                  
+                  <!-- Combined axis track (only shown when collapsed) -->
+                  <div v-if="!arePropertyAxesExpanded(selectedObject.id, track.prop)" class="relative h-6 border-b border-[#1a1a1a] bg-[#1a1a1a]">
+                    <!-- Show keyframes when ANY axis has a keyframe -->
+                    <template v-if="selectedObject.keyframes?.[track.prop]">
+                      <i
+                        v-for="frame in [...new Set([
+                          ...getKeyframes(selectedObject, track.prop, 'x'),
+                          ...getKeyframes(selectedObject, track.prop, 'y'),
+                          ...getKeyframes(selectedObject, track.prop, 'z')
+                        ])]"
+                        :key="frame"
+                        :class="[
+                          'bi',
+                          (isKeyframeSelected(selectedObject, track.prop, 'x', frame) ||
+                           isKeyframeSelected(selectedObject, track.prop, 'y', frame) ||
+                           isKeyframeSelected(selectedObject, track.prop, 'z', frame)) ? 'bi-diamond' : 'bi-diamond-fill',
+                          'keyframe-marker absolute top-1/2 -translate-y-1/2 cursor-pointer transition-transform'
+                        ]"
+                        :style="{
+                          left: `${(frame / totalFrames) * 100}%`,
+                          marginLeft: '-6px',
+                          color: track.color,
+                          fontSize: hasKeyframe(selectedObject, track.prop, 'x', frame) && hasKeyframe(selectedObject, track.prop, 'y', frame) && hasKeyframe(selectedObject, track.prop, 'z', frame) ? '14px' : '12px',
+                          fontWeight: hasKeyframe(selectedObject, track.prop, 'x', frame) && hasKeyframe(selectedObject, track.prop, 'y', frame) && hasKeyframe(selectedObject, track.prop, 'z', frame) ? 'bold' : 'normal'
+                        }"
+                        :title="`${track.label} @ Frame ${frame} - ${[
+                          hasKeyframe(selectedObject, track.prop, 'x', frame) ? 'X' : null,
+                          hasKeyframe(selectedObject, track.prop, 'y', frame) ? 'Y' : null,
+                          hasKeyframe(selectedObject, track.prop, 'z', frame) ? 'Z' : null
+                        ].filter(Boolean).join(', ')}`"
+                        @mousedown.stop="(e) => { if (e.button === 0) { const firstAxis = hasKeyframe(selectedObject, track.prop, 'x', frame) ? 'x' : hasKeyframe(selectedObject, track.prop, 'y', frame) ? 'y' : 'z'; startKeyframeDrag(selectedObject, track.prop, firstAxis, frame, e) } }"
+                        @click.stop="(e) => { const firstAxis = hasKeyframe(selectedObject, track.prop, 'x', frame) ? 'x' : hasKeyframe(selectedObject, track.prop, 'y', frame) ? 'y' : 'z'; selectKeyframe(selectedObject, track.prop, firstAxis, frame, e) }"
+                      ></i>
+                    </template>
+                  </div>
+                </template>
               </div>
             </template>
           </template>

@@ -117,6 +117,80 @@ const scaleZ = computed({
   }
 })
 
+// Opacity (0-100% display, stored as 0-1 internally)
+const opacity = computed({
+  get: () => {
+    // Return default 100 if not set
+    if (!selectedObject.value) return 100
+    if (selectedObject.value.opacity === undefined) return 100
+    return parseFloat(((selectedObject.value.opacity) * 100).toFixed(2))
+  },
+  set: (val) => {
+    if (selectedObject.value) {
+      // Convert percentage (0-100) to decimal (0-1)
+      selectedObject.value.opacity = parseFloat(val) / 100
+    }
+  }
+})
+
+// Pivot Offset (same visual scaling as position - 1 meter = 16 arbitrary units)
+const pivotOffsetX = computed({
+  get: () => {
+    const val = selectedObject.value?.pivotOffset?.x !== undefined
+      ? selectedObject.value.pivotOffset.x
+      : 0
+    return parseFloat((val * 16).toFixed(2))
+  },
+  set: (val) => {
+    if (selectedObject.value) {
+      if (!selectedObject.value.pivotOffset) {
+        selectedObject.value.pivotOffset = { x: 0, y: -0.5, z: 0 }
+      }
+      // Handle empty/NaN values by defaulting to 0
+      const parsedVal = parseFloat(val)
+      selectedObject.value.pivotOffset.x = isNaN(parsedVal) ? 0 : parsedVal / 16
+    }
+  }
+})
+
+const pivotOffsetY = computed({
+  get: () => {
+    const val = selectedObject.value?.pivotOffset?.y !== undefined
+      ? selectedObject.value.pivotOffset.y
+      : -0.5
+    return parseFloat((val * 16).toFixed(2))
+  },
+  set: (val) => {
+    if (selectedObject.value) {
+      if (!selectedObject.value.pivotOffset) {
+        selectedObject.value.pivotOffset = { x: 0, y: -0.5, z: 0 }
+      }
+      // Handle empty/NaN values by defaulting to 0
+      const parsedVal = parseFloat(val)
+      selectedObject.value.pivotOffset.y = isNaN(parsedVal) ? 0 : parsedVal / 16
+    }
+  }
+})
+
+const pivotOffsetZ = computed({
+  get: () => {
+    const val = selectedObject.value?.pivotOffset?.z !== undefined
+      ? selectedObject.value.pivotOffset.z
+      : 0
+    return parseFloat((val * 16).toFixed(2))
+  },
+  set: (val) => {
+    if (selectedObject.value) {
+      if (!selectedObject.value.pivotOffset) {
+        selectedObject.value.pivotOffset = { x: 0, y: -0.5, z: 0 }
+      }
+      // Handle empty/NaN values by defaulting to 0
+      const parsedVal = parseFloat(val)
+      selectedObject.value.pivotOffset.z = isNaN(parsedVal) ? 0 : parsedVal / 16
+    }
+  }
+})
+
 // Handle background image file selection
 const handleBackgroundImageChange = (event) => {
   const file = event.target.files[0]
@@ -415,6 +489,31 @@ const handleBackgroundImageChange = (event) => {
             <input type="number" v-model.number="scaleZ" placeholder="Z"
               class="bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
           </div>
+        </div>
+        
+        <div class="mb-3">
+          <div class="text-[#aaa] text-xs mb-1 flex items-center gap-1">
+            <span>Pivot Offset</span>
+            <span class="text-[#666] text-[10px]">(non-keyframable)</span>
+          </div>
+          <div class="grid grid-cols-3 gap-1">
+            <input type="number" v-model.number="pivotOffsetX" placeholder="X"
+              class="bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
+            <input type="number" v-model.number="pivotOffsetY" placeholder="Y"
+              class="bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
+            <input type="number" v-model.number="pivotOffsetZ" placeholder="Z"
+              class="bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
+          </div>
+        </div>
+        
+        <div class="text-white text-[13px] font-medium mb-3 pb-1 border-b border-[#3c3c3c]">
+          Material
+        </div>
+        
+        <div class="mb-3">
+          <div class="text-[#aaa] text-xs mb-1">Opacity (%)</div>
+          <input type="number" v-model.number="opacity" placeholder="100" min="0" max="100" step="1"
+            class="w-full bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
         </div>
       </div>
     </div>
