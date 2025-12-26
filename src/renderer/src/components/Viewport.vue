@@ -750,7 +750,7 @@ onMounted(() => {
       }
 
       // Update mesh transforms from scene objects (including nested children)
-      const updateMeshTransforms = (objects, parentOpacity = 1) => {
+      const updateMeshTransforms = (objects, parentOpacity = 1, parentPivotOffset = { x: 0, y: -0.5, z: 0 }) => {
         objects.forEach(obj => {
           const mesh = meshMap.get(obj.id)
           if (mesh) {
@@ -767,21 +767,22 @@ onMounted(() => {
               mesh.material.transparent = true
             }
             
-            // Check if pivot offset has changed and update geometry if needed
-            const pivotOffset = obj.pivotOffset || { x: 0, y: -0.5, z: 0 }
+            // For children, inherit the parent's pivot (if obj.parent exists, use parent pivot)
+            // For root objects, use their own pivot
+            const effectivePivotOffset = obj.parent ? parentPivotOffset : (obj.pivotOffset || { x: 0, y: -0.5, z: 0 })
             const currentPivot = mesh.userData.pivotOffset || { x: 0, y: -0.5, z: 0 }
             
-            if (pivotOffset.x !== currentPivot.x ||
-                pivotOffset.y !== currentPivot.y ||
-                pivotOffset.z !== currentPivot.z) {
+            if (effectivePivotOffset.x !== currentPivot.x ||
+                effectivePivotOffset.y !== currentPivot.y ||
+                effectivePivotOffset.z !== currentPivot.z) {
               // Dispose old geometry and create new one with correct pivot offset
               mesh.geometry.dispose()
               const newGeometry = new THREE.BoxGeometry(1, 1, 1)
-              newGeometry.translate(-pivotOffset.x, -pivotOffset.y, -pivotOffset.z)
+              newGeometry.translate(-effectivePivotOffset.x, -effectivePivotOffset.y, -effectivePivotOffset.z)
               mesh.geometry = newGeometry
               
               // Store current pivot offset
-              mesh.userData.pivotOffset = { ...pivotOffset }
+              mesh.userData.pivotOffset = { ...effectivePivotOffset }
               
               // Update outline if this object is selected
               if (selectedObject.value && selectedObject.value.id === obj.id) {
@@ -816,14 +817,17 @@ onMounted(() => {
             
             // Outline is now a child of the mesh, so it follows automatically
             
-            // Recursively update children with combined opacity
+            // Pass down the pivot offset from parent (or this object if it has children)
+            const pivotForChildren = obj.pivotOffset || effectivePivotOffset
+            
+            // Recursively update children with combined opacity and inherited pivot
             if (obj.children && obj.children.length > 0) {
-              updateMeshTransforms(obj.children, finalOpacity)
+              updateMeshTransforms(obj.children, finalOpacity, pivotForChildren)
             }
           } else {
-            // If mesh doesn't exist yet but has children, still propagate opacity
+            // If mesh doesn't exist yet but has children, still propagate opacity and pivot
             if (obj.children && obj.children.length > 0) {
-              updateMeshTransforms(obj.children, parentOpacity)
+              updateMeshTransforms(obj.children, parentOpacity, parentPivotOffset)
             }
           }
         })
