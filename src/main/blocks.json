@@ -68,7 +68,39 @@
     },
     {
       "name": "Dispenser",
-      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser.json"
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser.json",
+      "states": [
+        {
+          "name": "north",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser.json",
+          "orientation": "north"
+        },
+        {
+          "name": "south",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser.json",
+          "orientation": "south"
+        },
+        {
+          "name": "east",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser.json",
+          "orientation": "east"
+        },
+        {
+          "name": "west",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser.json",
+          "orientation": "west"
+        },
+        {
+          "name": "up",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser_vertical.json",
+          "orientation": "up"
+        },
+        {
+          "name": "down",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/dispenser_vertical.json",
+          "orientation": "down"
+        }
+      ]
     },
     {
       "name": "Oak Wood Door",
@@ -307,12 +339,102 @@
     },
     {
       "name": "Repeater",
-      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater.json"
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater.json",
+      "states": [
+        {
+          "name": "1tick",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_1tick.json"
+        },
+        {
+          "name": "1tick_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_1tick_locked.json"
+        },
+        {
+          "name": "1tick_on",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_1tick_on.json"
+        },
+        {
+          "name": "1tick_on_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_1tick_on_locked.json"
+        },
+        {
+          "name": "2tick",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_2tick.json"
+        },
+        {
+          "name": "2tick_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_2tick_locked.json"
+        },
+        {
+          "name": "2tick_on",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_2tick_on.json"
+        },
+        {
+          "name": "2tick_on_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_2tick_on_locked.json"
+        },
+        {
+          "name": "3tick",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_3tick.json"
+        },
+        {
+          "name": "3tick_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_3tick_locked.json"
+        },
+        {
+          "name": "3tick_on",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_3tick_on.json"
+        },
+        {
+          "name": "3tick_on_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_3tick_on_locked.json"
+        },
+        {
+          "name": "4tick",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_4tick.json"
+        },
+        {
+          "name": "4tick_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_4tick_locked.json"
+        },
+        {
+          "name": "4tick_on",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_4tick_on.json"
+        },
+        {
+          "name": "4tick_on_locked",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/repeater_4tick_on_locked.json"
+        }
+      ]
     },
     {
       "name": "Rail",
       "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rail.json",
-      "category": "Rail"
+      "category": "Rail",
+      "states": [
+        {
+          "name": "north",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rail.json",
+          "orientation": "north"
+        },
+        {
+          "name": "west",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rail.json",
+          "orientation": "west"
+        },
+        {
+          "name": "corner",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rail_corner.json"
+        },
+        {
+          "name": "raised_ne",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rail_raised_ne.json"
+        },
+        {
+          "name": "raised_sw",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/rail_raised_sw.json"
+        }
+      ]
     },
     {
       "name": "Powered Rail",
@@ -326,7 +448,17 @@
     },
     {
       "name": "Redstone Lamp",
-      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/redstone_lamp.json"
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/redstone_lamp.json",
+      "states": [
+        {
+          "name": "off",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/redstone_lamp.json"
+        },
+        {
+          "name": "on",
+          "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/redstone_lamp_on.json"
+        }
+      ]
     },
     {
       "name": "Rose",
@@ -339,7 +471,18 @@
     },
     {
       "name": "Sandstone",
-      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/sandstone.json"
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/sandstone.json",
+      "category": "Sandstone"
+    },
+    {
+      "name": "Smooth Sandstone",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/smooth_sandstone.json",
+      "category": "Sandstone"
+    },
+    {
+      "name": "Chiseled Sandstone",
+      "path": "SimplyRemadeAssetsV1/assets/minecraft/models/block/chiseled_sandstone.json",
+      "category": "Sandstone"
     },
     {
       "name": "Oak Sapling",

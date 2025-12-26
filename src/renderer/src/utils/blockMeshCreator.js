@@ -1,5 +1,35 @@
 import * as THREE from 'three'
 
+// Helper function to apply orientation to a mesh
+const applyOrientation = (target, orientation) => {
+  console.log('applyOrientation called with:', orientation)
+  console.log('Before rotation:', target.rotation.y * (180 / Math.PI), 'degrees')
+  
+  switch (orientation) {
+    case 'north': // -Z direction (default in most block models)
+      // No rotation needed, this is default
+      target.rotation.y = 0
+      break
+    case 'south': // +Z direction
+      target.rotation.y = Math.PI
+      break
+    case 'east': // +X direction
+      target.rotation.y = Math.PI / 2
+      break
+    case 'west': // -X direction
+      target.rotation.y = -Math.PI / 2
+      break
+    case 'up': // +Y direction
+      target.rotation.x = -Math.PI / 2
+      break
+    case 'down': // -Y direction
+      target.rotation.x = Math.PI / 2
+      break
+  }
+  
+  console.log('After rotation:', target.rotation.y * (180 / Math.PI), 'degrees')
+}
+
 // Helper function to load a texture
 export const loadTextureFromData = async (textureData) => {
   if (textureData.error) {
@@ -60,6 +90,11 @@ const loadModelWithParents = async (modelPath, window, visited = new Set()) => {
 // Helper function to create block mesh from Minecraft JSON model
 export const createBlockMesh = async (obj, window) => {
   try {
+    // Debug: Log orientation
+    if (obj.orientation) {
+      console.log('Creating block with orientation:', obj.orientation, 'for block:', obj.name)
+    }
+    
     // Load the block model JSON with parents
     const blockModel = await loadModelWithParents(obj.blockPath, window)
     
@@ -343,9 +378,16 @@ export const createBlockMesh = async (obj, window) => {
         -obj.pivotOffset.z
       )
       
+      // Apply orientation to group before adding to container
+      if (obj.orientation) {
+        applyOrientation(group, obj.orientation)
+      }
+      
       // Set transform
       const container = new THREE.Object3D()
       container.add(group)
+      
+      // Apply user transforms to container
       container.position.set(obj.position.x, obj.position.y, obj.position.z)
       container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
       container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
@@ -490,18 +532,29 @@ export const createBlockMesh = async (obj, window) => {
         return null
       }
       
+     // Create parent container for orientation
+      const container = new THREE.Object3D()
       const mesh = new THREE.Mesh(geometry, materials)
       
-      mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
-      mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
-      mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+      // Apply orientation to mesh
+      if (obj.orientation) {
+        applyOrientation(mesh, obj.orientation)
+      }
+      
+      container.add(mesh)
+      
+      // Apply user transforms to container
+      container.position.set(obj.position.x, obj.position.y, obj.position.z)
+      container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
+      container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
       
       // Store reference to scene object for picking
+      container.userData.sceneObjectId = obj.id
       mesh.userData.sceneObjectId = obj.id
       // Store initial pivot offset for change tracking
-      mesh.userData.pivotOffset = { ...obj.pivotOffset }
+      container.userData.pivotOffset = { ...obj.pivotOffset }
       
-      return mesh
+      return container
     }
   } catch (error) {
     console.error('Error creating block mesh:', error)

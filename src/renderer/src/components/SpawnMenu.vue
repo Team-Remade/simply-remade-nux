@@ -16,6 +16,8 @@ const selectObject = inject('selectObject')
 
 const selectedCategory = ref('Primitives')
 const selectedItem = ref(null)
+const selectedState = ref(null)
+const searchQuery = ref('')
 const blocks = ref([])
 
 // Load blocks from the API
@@ -28,6 +30,7 @@ onMounted(async () => {
         type: 'block',
         blockPath: block.path,
         category: block.category || null,
+        states: block.states || null,
         id: block.path // Use path as unique identifier
       }))
     }
@@ -58,10 +61,16 @@ const spawnCategories = computed(() => {
     blockItems.push({
       name: category,
       type: 'subcategory-header',
-      isHeader: true
+      isHeader: true,
+      id: `header-${category}` // Unique ID for headers
     })
     // Add blocks in this subcategory
-    blockItems.push(...blocksByCategory[category])
+    blocksByCategory[category].forEach(block => {
+      blockItems.push({
+        ...block,
+        categoryName: category // Store which category this block belongs to
+      })
+    })
   })
   
   return {
@@ -86,11 +95,60 @@ const spawnCategories = computed(() => {
 })
 
 const categoryList = computed(() => Object.keys(spawnCategories.value))
-const currentCategoryItems = computed(() => spawnCategories.value[selectedCategory.value] || [])
+
+const currentCategoryItems = computed(() => {
+  const items = spawnCategories.value[selectedCategory.value] || []
+  
+  // If search query is empty, return all items
+  if (!searchQuery.value.trim()) {
+    return items
+  }
+  
+  // Filter items based on search query
+  const query = searchQuery.value.toLowerCase().trim()
+  const filtered = []
+  let currentHeader = null
+  const categoryItems = []
+  
+  items.forEach((item) => {
+    if (item.isHeader) {
+      // If we have a previous header with items, add them to filtered
+      if (currentHeader && categoryItems.length > 0) {
+        filtered.push(currentHeader)
+        filtered.push(...categoryItems)
+      }
+      // Start new category
+      currentHeader = item
+      categoryItems.length = 0
+    } else if (item.name.toLowerCase().includes(query)) {
+      // Add matching item to current category
+      categoryItems.push(item)
+    }
+  })
+  
+  // Don't forget the last category
+  if (currentHeader && categoryItems.length > 0) {
+    filtered.push(currentHeader)
+    filtered.push(...categoryItems)
+  }
+  
+  return filtered
+})
 
 // Function to select an item
 const selectItem = (item) => {
   selectedItem.value = item
+  // If the item has states, default to the first state
+  if (item.states && item.states.length > 0) {
+    selectedState.value = item.states[0]
+  } else {
+    selectedState.value = null
+  }
+}
+
+// Function to select a state
+const selectState = (state) => {
+  selectedState.value = state
 }
 
 // Function to create the selected object
@@ -112,7 +170,17 @@ const createObject = () => {
   
   // Add blockPath if it's a block
   if (selectedItem.value.blockPath) {
-    newObject.blockPath = selectedItem.value.blockPath
+    // Use the selected state's path if available, otherwise use default
+    if (selectedState.value && selectedState.value.path) {
+      newObject.blockPath = selectedState.value.path
+      newObject.blockState = selectedState.value.name
+      // Add orientation if the state has one
+      if (selectedState.value.orientation) {
+        newObject.orientation = selectedState.value.orientation
+      }
+    } else {
+      newObject.blockPath = selectedItem.value.blockPath
+    }
   }
   
   sceneObjects.value.push(newObject)
@@ -156,11 +224,23 @@ const closeMenu = () => {
 
     <!-- Objects Column -->
     <div class="flex-1 flex flex-col">
-      <div class="p-1.5 border-b border-[#3c3c3c] text-[#aaa] text-xs font-semibold">
-        {{ selectedCategory }}
+      <!-- Category Header with Search -->
+      <div class="border-b border-[#3c3c3c]">
+        <div class="p-1.5 text-[#aaa] text-xs font-semibold">
+          {{ selectedCategory }}
+        </div>
+        <div class="px-1.5 pb-1.5">
+          <input
+            v-model.trim="searchQuery"
+            type="text"
+            :placeholder="`Search ${selectedCategory}...`"
+            @input="() => {}"
+            class="w-full px-2 py-1 text-xs bg-[#1a1a1a] border border-[#3c3c3c] rounded text-[#aaa] placeholder-[#666] focus:outline-none focus:border-[#3c8edb]"
+          />
+        </div>
       </div>
       <div class="flex-1 overflow-y-auto p-1.5">
-        <template v-for="item in currentCategoryItems" :key="item.id || item.type">
+        <template v-for="item in currentCategoryItems" :key="item.id">
           <!-- Subcategory Header -->
           <div
             v-if="item.isHeader"
@@ -181,9 +261,28 @@ const closeMenu = () => {
           >
             {{ item.name }}
           </button>
-        </template>
-      </div>
-      <div class="p-1.5 border-t border-[#3c3c3c] flex justify-end gap-1.5">
+          </template>
+        </div>
+        <!-- States Selector (if selected item has states) -->
+        <div v-if="selectedItem?.states && selectedItem.states.length > 0" class="p-1.5 border-t border-[#3c3c3c] bg-[#252525]">
+          <div class="text-[10px] text-[#888] uppercase tracking-wider mb-1 font-semibold">Block State</div>
+          <div class="flex flex-wrap gap-1">
+            <button
+              v-for="state in selectedItem.states"
+              :key="state.name"
+              @click="selectState(state)"
+              :class="[
+                'px-2 py-1 text-xs rounded transition-colors capitalize',
+                selectedState?.name === state.name
+                  ? 'bg-[#3c8edb] text-white'
+                  : 'bg-[#333] text-[#aaa] hover:bg-[#3c3c3c]'
+              ]"
+            >
+              {{ state.name }}
+            </button>
+          </div>
+        </div>
+        <div class="p-1.5 border-t border-[#3c3c3c] flex justify-end gap-1.5">
         <button
           @click="closeMenu"
           class="px-2 py-1 text-xs bg-[#1a1a1a] hover:bg-[#333] text-[#aaa] rounded transition-colors"
