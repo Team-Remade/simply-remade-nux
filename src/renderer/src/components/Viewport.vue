@@ -310,26 +310,22 @@ onMounted(() => {
             height = 2 * Math.tan(vFov / 2) * distance
             width = height * camera.aspect
           } else {
-            // Use original image resolution, scaled by distance
-            // Calculate the size at the given distance that represents the original pixel dimensions
-            // We need to map pixels to world units based on distance from camera
-            // At distance d, the viewport height in world units is: 2 * tan(vFov/2) * d
-            // The pixel height of the viewport is the canvas height
-            const viewportHeightInWorldUnits = 2 * Math.tan(vFov / 2) * distance
-            const pixelsPerWorldUnit = camera.aspect * canvasContainer.value.clientHeight / viewportHeightInWorldUnits
-            
-            // Convert image pixel dimensions to world units at the background distance
-            height = texture.image.height / pixelsPerWorldUnit
-            width = texture.image.width / pixelsPerWorldUnit
-            
-            // Calculate viewport dimensions at this distance
-            const viewportHeight = viewportHeightInWorldUnits
+            // Use original image resolution (1:1 pixel mapping)
+            // Calculate viewport dimensions in world units at the background distance
+            const viewportHeight = 2 * Math.tan(vFov / 2) * distance
             const viewportWidth = viewportHeight * camera.aspect
             
+            // Calculate how many pixels fit in the viewport height
+            const canvasHeight = canvasContainer.value.clientHeight
+            const pixelToWorldRatio = viewportHeight / canvasHeight
+            
+            // Convert image pixel dimensions to world units (1:1 pixel mapping)
+            height = texture.image.height * pixelToWorldRatio
+            width = texture.image.width * pixelToWorldRatio
+            
             // Position image at top-left corner of viewport
-            // Offset by half the viewport dimensions minus half the image dimensions
-            offsetX = -(viewportWidth / 2 - width / 2)  // Move to left
-            offsetY = (viewportHeight / 2 - height / 2)  // Move to top
+            offsetX = -(viewportWidth / 2) + (width / 2)  // Align left edge
+            offsetY = (viewportHeight / 2) - (height / 2)  // Align top edge
           }
           
           // Create a plane with calculated dimensions
