@@ -7,6 +7,7 @@ const selectedObject = inject('selectedObject')
 const selectObject = inject('selectObject')
 const setParent = inject('setParent')
 const deleteObject = inject('deleteObject')
+const duplicateObject = inject('duplicateObject')
 
 // Context menu state
 const contextMenu = ref({
@@ -33,6 +34,13 @@ const hideContextMenu = () => {
 const handleDeleteFromContextMenu = () => {
   if (contextMenu.value.targetObject) {
     deleteObject(contextMenu.value.targetObject)
+  }
+  hideContextMenu()
+}
+
+const handleDuplicateFromContextMenu = () => {
+  if (contextMenu.value.targetObject) {
+    duplicateObject(contextMenu.value.targetObject)
   }
   hideContextMenu()
 }
@@ -179,12 +187,18 @@ const isDescendant = (checkObj, parentObj) => {
     <!-- Context Menu -->
     <div
       v-if="contextMenu.visible"
-      class="fixed bg-[#2c2c2c] border border-[#3a3a3a] rounded shadow-lg py-1 z-50"
+      class="fixed bg-[#2c2c2c] border border-[#3a3a3a] rounded shadow-lg py-0.5 z-50"
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
       @click.stop
     >
       <div
-        class="px-4 py-2 text-[13px] text-[#ccc] hover:bg-[#3c3c3c] cursor-pointer"
+        class="px-3 py-1 text-[13px] text-[#ccc] hover:bg-[#3c3c3c] cursor-pointer"
+        @click="handleDuplicateFromContextMenu"
+      >
+        Duplicate
+      </div>
+      <div
+        class="px-3 py-1 text-[13px] text-[#ccc] hover:bg-[#3c3c3c] cursor-pointer"
         @click="handleDeleteFromContextMenu"
       >
         Delete

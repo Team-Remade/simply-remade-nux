@@ -1,5 +1,5 @@
 <script setup>
-import { ref, provide, onMounted, onUnmounted } from 'vue'
+import { ref, provide } from 'vue'
 import Menubar from './components/Menubar.vue'
 import Viewport from './components/Viewport.vue'
 import SceneTree from './components/SceneTree.vue'
@@ -10,7 +10,6 @@ import Timeline from './components/Timeline.vue'
 const sceneObjects = ref([])
 const selectedObject = ref(null)
 const currentFrame = ref(0)
-let cubeCounter = 0
 
 // Project settings
 const projectSettings = ref({
@@ -117,41 +116,98 @@ const deleteObject = (obj) => {
 // Provide deleteObject function to child components
 provide('deleteObject', deleteObject)
 
-// Function to spawn a cube
-const spawnCube = () => {
-  cubeCounter++
-  const newCube = {
-    id: `cube_${cubeCounter}`,
-    name: `Cube ${cubeCounter}`,
-    type: 'cube',
-    position: { x: 0, y: 0, z: 0 },
-    rotation: { x: 0, y: 0, z: 0 },
-    scale: { x: 1, y: 1, z: 1 },
-    pivotOffset: { x: 0, y: -0.5, z: 0 },
-    parent: null,
-    expanded: false,
-    setParent(parent) {
-      setParent(this, parent)
+// Function to duplicate an object
+const duplicateObject = (obj) => {
+  if (!obj) return
+  
+  // Create a deep copy of the object
+  const duplicate = JSON.parse(JSON.stringify(obj))
+  
+  // Generate a new unique ID
+  duplicate.id = Date.now() + Math.random()
+  
+  // Find all objects with similar names and get the highest number
+  const getAllObjects = (objects) => {
+    let allObjs = []
+    objects.forEach(o => {
+      allObjs.push(o)
+      if (o.children) {
+        allObjs = allObjs.concat(getAllObjects(o.children))
+      }
+    })
+    return allObjs
+  }
+  
+  const allObjects = getAllObjects(sceneObjects.value)
+  
+  // Extract base name and find the highest number
+  let baseName = obj.name
+  let highestNum = 0
+  
+  // Check if the name already ends with a number (e.g., "Object 1")
+  const match = obj.name.match(/^(.*?)(\d+)$/)
+  if (match) {
+    baseName = match[1].trim()
+    highestNum = parseInt(match[2])
+  }
+  
+  // Find all objects with the same base name and get highest number
+  allObjects.forEach(o => {
+    if (o.name.startsWith(baseName)) {
+      const numMatch = o.name.match(/^.*?(\d+)$/)
+      if (numMatch) {
+        const num = parseInt(numMatch[1])
+        if (num > highestNum) {
+          highestNum = num
+        }
+      }
     }
+  })
+  
+  // Set the new name with incremented number
+  duplicate.name = `${baseName}${highestNum + 1}`
+  
+  // Reset parent reference initially
+  const parentId = duplicate.parent
+  duplicate.parent = null
+  
+  // If the object has children, update their parent references
+  if (duplicate.children) {
+    const updateChildrenParent = (children, newParentId) => {
+      children.forEach(child => {
+        child.id = Date.now() + Math.random()
+        child.parent = newParentId
+        if (child.children) {
+          updateChildrenParent(child.children, child.id)
+        }
+      })
+    }
+    updateChildrenParent(duplicate.children, duplicate.id)
   }
-  sceneObjects.value.push(newCube)
+  
+  // Add the duplicate to the scene at the same level as the original
+  if (parentId) {
+    // Find the parent and add duplicate to its children
+    const parent = sceneObjects.value.find(o => o.id === parentId)
+    if (parent) {
+      if (!parent.children) {
+        parent.children = []
+      }
+      parent.children.push(duplicate)
+      duplicate.parent = parentId
+    }
+  } else {
+    // Add to root level
+    sceneObjects.value.push(duplicate)
+  }
+  
+  // Select the duplicated object
+  selectedObject.value = duplicate
 }
 
-// Keyboard event handler
-const handleKeyPress = (event) => {
-  if (event.key === 'F7') {
-    event.preventDefault()
-    spawnCube()
-  }
-}
+// Provide duplicateObject function to child components
+provide('duplicateObject', duplicateObject)
 
-onMounted(() => {
-  window.addEventListener('keydown', handleKeyPress)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeyPress)
-})
 </script>
 
 <template>
