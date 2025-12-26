@@ -5,6 +5,14 @@ import icon from '../../resources/appIcon01.png?asset'
 import chegg from '../../resources/chegg.png?asset'
 import { randomInt } from '../renderer/src/MathUtil'
 
+// Enable hardware acceleration optimizations
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('disable-software-rasterizer')
+app.commandLine.appendSwitch('enable-webgl')
+app.commandLine.appendSwitch('enable-webgl2-compute-context')
+app.commandLine.appendSwitch('ignore-gpu-blocklist')
+
 function createWindow() {
   // Create the browser window.
   nativeTheme.themeSource = 'dark'
@@ -17,7 +25,10 @@ function createWindow() {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      webgl: true,
+      acceleratedGraphics: true,
+      hardwareAcceleration: true
     },
     backgroundColor: '#2c2e29',
     icon: icon,
