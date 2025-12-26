@@ -2,8 +2,6 @@ import { app, shell, BrowserWindow, ipcMain, screen, nativeTheme } from 'electro
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/appIcon01.png?asset'
-import chegg from '../../resources/chegg.png?asset'
-import { randomInt } from '../renderer/src/MathUtil'
 
 // Enable hardware acceleration optimizations
 app.commandLine.appendSwitch('enable-gpu-rasterization')
