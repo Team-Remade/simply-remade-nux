@@ -45,13 +45,6 @@ function createWindow() {
   mainWindow.setSize(screenWidth, screenHeight)
   mainWindow.center()
 
-  // Window icon Easter egg. This has a small chance to replace Steve with Herobrine
-  const rand = randomInt(1, 1000)
-
-  if (rand === -1) {
-    mainWindow.setIcon(chegg)
-  }
-
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
