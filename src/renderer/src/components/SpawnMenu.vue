@@ -146,11 +146,6 @@ const selectItem = (item) => {
   }
 }
 
-// Function to select a state
-const selectState = (state) => {
-  selectedState.value = state
-}
-
 // Function to create the selected object
 const createObject = () => {
   if (!selectedItem.value) return
@@ -266,21 +261,18 @@ const closeMenu = () => {
         <!-- States Selector (if selected item has states) -->
         <div v-if="selectedItem?.states && selectedItem.states.length > 0" class="p-1.5 border-t border-[#3c3c3c] bg-[#252525]">
           <div class="text-[10px] text-[#888] uppercase tracking-wider mb-1 font-semibold">Block State</div>
-          <div class="flex flex-wrap gap-1">
-            <button
+          <select
+            v-model="selectedState"
+            class="w-full px-2 py-1.5 text-xs bg-[#1a1a1a] border border-[#3c3c3c] rounded text-[#aaa] focus:outline-none focus:border-[#3c8edb]"
+          >
+            <option
               v-for="state in selectedItem.states"
               :key="state.name"
-              @click="selectState(state)"
-              :class="[
-                'px-2 py-1 text-xs rounded transition-colors capitalize',
-                selectedState?.name === state.name
-                  ? 'bg-[#3c8edb] text-white'
-                  : 'bg-[#333] text-[#aaa] hover:bg-[#3c3c3c]'
-              ]"
+              :value="state"
             >
               {{ state.name }}
-            </button>
-          </div>
+            </option>
+          </select>
         </div>
         <div class="p-1.5 border-t border-[#3c3c3c] flex justify-end gap-1.5">
         <button

@@ -68,8 +68,8 @@ const loadModelWithParents = async (modelPath, window, visited = new Set()) => {
   
   // If model has a parent, load and merge it
   if (model.parent) {
-    // Convert parent reference to path
-    const parentPath = model.parent.replace('minecraft:', 'SimplyRemadeAssetsV1/assets/minecraft/models/') + '.json'
+    // Strip namespace from parent and pass as relative path to let load-block-model handler resolve it
+    const parentPath = model.parent.replace(/^[^:]+:/, '') + '.json'
     const parentModel = await loadModelWithParents(parentPath, window, visited)
     
     if (parentModel) {

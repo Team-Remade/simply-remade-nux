@@ -12,10 +12,6 @@ export default defineConfig({
           {
             src: 'src/main/SimplyRemadeAssetsV1.zip',
             dest: '.'
-          },
-          {
-            src: 'src/main/blocks.json',
-            dest: '.'
           }
         ]
       })
