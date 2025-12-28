@@ -109,6 +109,170 @@ function findBlockstatesFolder(startPath) {
   return null
 }
 
+// Function to recursively search for models/item folder
+function findItemsFolder(startPath) {
+  const toSearch = [startPath]
+  
+  while (toSearch.length > 0) {
+    const currentPath = toSearch.shift()
+    
+    try {
+      const items = readdirSync(currentPath)
+      
+      for (const item of items) {
+        const itemPath = join(currentPath, item)
+        
+        try {
+          const stats = statSync(itemPath)
+          
+          if (stats.isDirectory()) {
+            // Check if this is models/item directory
+            if (item.toLowerCase() === 'item' && currentPath.endsWith('models')) {
+              return itemPath
+            }
+            // Add to search queue
+            toSearch.push(itemPath)
+          }
+        } catch {
+          // Skip items we can't access
+          continue
+        }
+      }
+    } catch {
+      // Skip directories we can't read
+      continue
+    }
+  }
+  
+  return null
+}
+
+// Function to generate items.json from models/item folder for a given assets folder
+function generateItemsJsonForFolder(dataDir, assetsFolder) {
+  try {
+    console.log(`Generating items.json for ${assetsFolder}...`)
+    
+    // Category mappings based on item names
+    const categoryMappings = {
+      '_sword': 'Sword',
+      '_pickaxe': 'Pickaxe',
+      '_axe': 'Axe',
+      '_shovel': 'Shovel',
+      '_hoe': 'Hoe',
+      '_helmet': 'Helmet',
+      '_chestplate': 'Chestplate',
+      '_leggings': 'Leggings',
+      '_boots': 'Boots',
+      '_ingot': 'Ingot',
+      '_nugget': 'Nugget',
+      'potion': 'Potion',
+      'spawn_egg': 'Spawn Egg',
+      'bucket': 'Bucket',
+      'arrow': 'Arrow'
+    }
+    
+    // Search for items directory recursively
+    const assetsFolderPath = join(dataDir, assetsFolder)
+    const itemsPath = findItemsFolder(assetsFolderPath)
+    
+    if (!itemsPath) {
+      console.log(`No models/item folder found in ${assetsFolder}`)
+      return null
+    }
+    
+    console.log(`Found items at: ${itemsPath}`)
+    
+    // Determine the relative path prefix for models based on items location
+    const relativePath = itemsPath.replace(assetsFolderPath, assetsFolder).replace(/\\/g, '/')
+    const pathParts = relativePath.split('/')
+    // Remove 'item' from the end to get the models path prefix
+    pathParts.pop()
+    const modelsPrefix = pathParts.join('/')
+    
+    // Read all item model files
+    const itemFiles = readdirSync(itemsPath).filter(file =>
+      file.endsWith('.json') && statSync(join(itemsPath, file)).isFile()
+    )
+    
+    console.log(`Found ${itemFiles.length} item files in ${assetsFolder}`)
+    
+    const items = []
+    const fs = require('fs')
+    
+    for (const filename of itemFiles) {
+      const itemId = filename.replace('.json', '')
+      
+      // Read item model JSON to check parent
+      const itemModelPath = join(itemsPath, filename)
+      const itemModelContent = fs.readFileSync(itemModelPath, 'utf8')
+      const itemModel = JSON.parse(itemModelContent)
+      
+      // Skip items that inherit from block models
+      if (itemModel.parent && itemModel.parent.includes('block/')) {
+        console.log(`Skipping ${itemId} - inherits from block model: ${itemModel.parent}`)
+        continue
+      }
+      
+      // Check if item inherits from handheld or handheld_rod
+      let shouldReplaceWithGenerated = false
+      if (itemModel.parent) {
+        const parent = itemModel.parent.toLowerCase()
+        if (parent.includes('handheld')) {
+          shouldReplaceWithGenerated = true
+          console.log(`${itemId} uses handheld model, will replace with generated`)
+        }
+      }
+      
+      // Convert item ID to readable name
+      const name = itemId
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+      
+      // Determine category
+      let category = undefined
+      for (const [key, cat] of Object.entries(categoryMappings)) {
+        if (itemId.includes(key)) {
+          category = cat
+          break
+        }
+      }
+      
+      const item = {
+        name: name,
+        path: `${modelsPrefix}/item/${itemId}.json`,
+        useGenerated: shouldReplaceWithGenerated
+      }
+      
+      if (category) {
+        item.category = category
+      }
+      
+      items.push(item)
+    }
+    
+    // Sort items alphabetically
+    items.sort((a, b) => a.name.localeCompare(b.name))
+    
+    const output = {
+      items: items
+    }
+    
+    // Write items.json to the assets folder directory
+    const itemsJsonPath = join(dataDir, assetsFolder, 'items.json')
+    writeFileSync(itemsJsonPath, JSON.stringify(output, null, 2))
+    
+    console.log(`Generated items.json for ${assetsFolder} with ${items.length} items`)
+    console.log('Items saved to:', itemsJsonPath)
+    
+    return itemsJsonPath
+    
+  } catch (error) {
+    console.error(`Error generating items.json for ${assetsFolder}:`, error)
+    return null
+  }
+}
+
 // Function to generate blocks.json from blockstates for a given assets folder
 function generateBlocksJsonForFolder(dataDir, assetsFolder) {
   try {
@@ -271,7 +435,7 @@ function generateBlocksJsonForFolder(dataDir, assetsFolder) {
   }
 }
 
-// Function to scan data directory for folders containing "assets" and generate blocks.json for each
+// Function to scan data directory for folders containing "assets" and generate blocks.json and items.json for each
 function generateAllBlocksJson() {
   try {
     const dataDir = join(app.getPath('userData'), 'data')
@@ -292,22 +456,28 @@ function generateAllBlocksJson() {
     
     console.log(`Found ${assetsFolders.length} folders containing "assets": ${assetsFolders.join(', ')}`)
     
-    // Generate blocks.json for each assets folder
-    const generatedFiles = []
+    // Generate blocks.json and items.json for each assets folder
+    const generatedBlockFiles = []
+    const generatedItemFiles = []
     assetsFolders.forEach(folder => {
-      const result = generateBlocksJsonForFolder(dataDir, folder)
-      if (result) {
-        generatedFiles.push(result)
+      const blockResult = generateBlocksJsonForFolder(dataDir, folder)
+      if (blockResult) {
+        generatedBlockFiles.push(blockResult)
+      }
+      
+      const itemResult = generateItemsJsonForFolder(dataDir, folder)
+      if (itemResult) {
+        generatedItemFiles.push(itemResult)
       }
     })
     
     // Also generate the main blocks.json that combines all packs (for backwards compatibility)
-    if (generatedFiles.length > 0) {
+    if (generatedBlockFiles.length > 0) {
       // Merge all blocks.json files into one
       const fs = require('fs')
       const allBlocks = []
       
-      for (const filePath of generatedFiles) {
+      for (const filePath of generatedBlockFiles) {
         const data = fs.readFileSync(filePath, 'utf8')
         const blocksData = JSON.parse(data)
         if (blocksData.blocks && Array.isArray(blocksData.blocks)) {
@@ -323,7 +493,32 @@ function generateAllBlocksJson() {
       }
       
       writeFileSync(join(dataDir, 'blocks.json'), JSON.stringify(mergedOutput, null, 2))
-      console.log(`Merged blocks.json created with ${allBlocks.length} total blocks from ${generatedFiles.length} asset packs`)
+      console.log(`Merged blocks.json created with ${allBlocks.length} total blocks from ${generatedBlockFiles.length} asset packs`)
+    }
+    
+    // Also generate the main items.json that combines all packs
+    if (generatedItemFiles.length > 0) {
+      // Merge all items.json files into one
+      const fs = require('fs')
+      const allItems = []
+      
+      for (const filePath of generatedItemFiles) {
+        const data = fs.readFileSync(filePath, 'utf8')
+        const itemsData = JSON.parse(data)
+        if (itemsData.items && Array.isArray(itemsData.items)) {
+          allItems.push(...itemsData.items)
+        }
+      }
+      
+      // Sort merged items alphabetically
+      allItems.sort((a, b) => a.name.localeCompare(b.name))
+      
+      const mergedOutput = {
+        items: allItems
+      }
+      
+      writeFileSync(join(dataDir, 'items.json'), JSON.stringify(mergedOutput, null, 2))
+      console.log(`Merged items.json created with ${allItems.length} total items from ${generatedItemFiles.length} asset packs`)
     }
     
   } catch (error) {
@@ -403,6 +598,26 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Error reading blocks data:', error)
       return { blocks: [], error: error.message }
+    }
+  })
+
+  // Handler to get items data
+  ipcMain.handle('get-items', async () => {
+    try {
+      // Read from the generated items.json file in data directory
+      const dataDir = join(app.getPath('userData'), 'data')
+      const itemsJsonPath = join(dataDir, 'items.json')
+      
+      if (existsSync(itemsJsonPath)) {
+        const fs = await import('fs/promises')
+        const data = await fs.readFile(itemsJsonPath, 'utf-8')
+        return JSON.parse(data)
+      } else {
+        return { items: [], error: 'items.json not found' }
+      }
+    } catch (error) {
+      console.error('Error reading items data:', error)
+      return { items: [], error: error.message }
     }
   })
 

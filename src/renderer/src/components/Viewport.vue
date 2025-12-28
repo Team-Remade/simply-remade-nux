@@ -6,6 +6,7 @@ import { useKeyframes } from '../composables/useKeyframes'
 import benchIcon from '../assets/img/bench.png'
 import SpawnMenu from './SpawnMenu.vue'
 import { createBlockMesh } from '../utils/blockMeshCreator'
+import { createItemMesh } from '../utils/itemMeshCreator'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
@@ -415,6 +416,25 @@ onMounted(() => {
           if (obj.type === 'block' && obj.blockPath) {
             // Handle block type - async creation
             createBlockMesh(obj, window).then(mesh => {
+              if (mesh && !meshMap.has(obj.id)) {
+                // Add to scene or parent mesh
+                if (obj.parent) {
+                  const parentMesh = meshMap.get(obj.parent)
+                  if (parentMesh) {
+                    parentMesh.add(mesh)
+                  } else {
+                    scene.add(mesh)
+                  }
+                } else {
+                  scene.add(mesh)
+                }
+                
+                meshMap.set(obj.id, mesh)
+              }
+            })
+          } else if (obj.type === 'item' && obj.itemPath) {
+            // Handle item type - async creation
+            createItemMesh(obj, window).then(mesh => {
               if (mesh && !meshMap.has(obj.id)) {
                 // Add to scene or parent mesh
                 if (obj.parent) {
