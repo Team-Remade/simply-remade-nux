@@ -371,30 +371,34 @@ export const createBlockMesh = async (obj, window) => {
         }
       }
       
-      // Apply pivot offset to the entire group
-      group.position.set(
-        -obj.pivotOffset.x,
-        -obj.pivotOffset.y,
-        -obj.pivotOffset.z
-      )
-      
       // Apply orientation to group before adding to container
       if (obj.orientation) {
         applyOrientation(group, obj.orientation)
       }
       
-      // Set transform
+      // Create nested container structure for pivot offset
+      // Inner container holds the visual mesh with offset
+      const pivotContainer = new THREE.Object3D()
+      pivotContainer.position.set(
+        -obj.pivotOffset.x,
+        -obj.pivotOffset.y,
+        -obj.pivotOffset.z
+      )
+      pivotContainer.add(group)
+      
+      // Outer container applies user transforms
       const container = new THREE.Object3D()
-      container.add(group)
+      container.add(pivotContainer)
       
       // Apply user transforms to container
       container.position.set(obj.position.x, obj.position.y, obj.position.z)
       container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
       container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
       
-      // Store reference to scene object for picking
+      // Store references
       container.userData.sceneObjectId = obj.id
       container.userData.pivotOffset = { ...obj.pivotOffset }
+      container.userData.pivotContainer = pivotContainer
       container.userData.isGroup = true
       
       return container
@@ -403,13 +407,6 @@ export const createBlockMesh = async (obj, window) => {
     else {
       // Create a cube geometry
       const geometry = new THREE.BoxGeometry(1, 1, 1)
-      
-      // Apply pivot offset to geometry (inverted)
-      geometry.translate(
-        -obj.pivotOffset.x,
-        -obj.pivotOffset.y,
-        -obj.pivotOffset.z
-      )
       
       let materials
       
@@ -532,27 +529,38 @@ export const createBlockMesh = async (obj, window) => {
         return null
       }
       
-     // Create parent container for orientation
-      const container = new THREE.Object3D()
+      // Create mesh
       const mesh = new THREE.Mesh(geometry, materials)
+      mesh.userData.sceneObjectId = obj.id
       
       // Apply orientation to mesh
       if (obj.orientation) {
         applyOrientation(mesh, obj.orientation)
       }
       
-      container.add(mesh)
+      // Create nested container structure for pivot offset
+      // Inner container holds the visual mesh with offset
+      const pivotContainer = new THREE.Object3D()
+      pivotContainer.position.set(
+        -obj.pivotOffset.x,
+        -obj.pivotOffset.y,
+        -obj.pivotOffset.z
+      )
+      pivotContainer.add(mesh)
+      
+      // Outer container applies user transforms
+      const container = new THREE.Object3D()
+      container.add(pivotContainer)
       
       // Apply user transforms to container
       container.position.set(obj.position.x, obj.position.y, obj.position.z)
       container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
       container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
       
-      // Store reference to scene object for picking
+      // Store references
       container.userData.sceneObjectId = obj.id
-      mesh.userData.sceneObjectId = obj.id
-      // Store initial pivot offset for change tracking
       container.userData.pivotOffset = { ...obj.pivotOffset }
+      container.userData.pivotContainer = pivotContainer
       
       return container
     }

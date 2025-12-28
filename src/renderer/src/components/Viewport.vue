@@ -1,5 +1,5 @@
 <script setup>
-import { ref, inject, watch, onMounted, onUnmounted } from 'vue'
+import { ref, inject, provide, watch, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import { useKeyframes } from '../composables/useKeyframes'
@@ -7,6 +7,7 @@ import benchIcon from '../assets/img/bench.png'
 import SpawnMenu from './SpawnMenu.vue'
 import { createBlockMesh } from '../utils/blockMeshCreator'
 import { createItemMesh } from '../utils/itemMeshCreator'
+import { createCameraMesh } from '../utils/cameraMeshCreator'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
@@ -19,6 +20,12 @@ const sceneObjects = inject('sceneObjects')
 const selectedObject = inject('selectedObject')
 const selectObject = inject('selectObject')
 const projectSettings = inject('projectSettings')
+
+// Provide viewport camera and controls for spawning cameras
+const viewportCamera = ref(null)
+const viewportControls = ref(null)
+provide('viewportCamera', viewportCamera)
+provide('viewportControls', viewportControls)
 
 // Use keyframe composable
 const { addKeyframeAtCurrentFrame } = useKeyframes()
@@ -78,6 +85,10 @@ onMounted(() => {
     // Initialize yaw and pitch from camera's rotation after lookAt
     controls.yaw = camera.rotation.y
     controls.pitch = camera.rotation.x
+    
+    // Provide viewport camera and controls for spawning
+    viewportCamera.value = camera
+    viewportControls.value = controls
 
     // Create renderer
     renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -280,6 +291,17 @@ onMounted(() => {
     // Watch for transform mode changes
     watch(transformMode, (newMode) => {
       if (transformControls) {
+        // Check if trying to set scale mode on a camera object
+        const isCamera = selectedObject.value &&
+                        (selectedObject.value.type === 'perspective-camera' ||
+                         selectedObject.value.type === 'orthographic-camera')
+        
+        // If trying to scale a camera, switch to translate instead
+        if (newMode === 'scale' && isCamera) {
+          transformMode.value = 'translate'
+          return
+        }
+        
         transformControls.setMode(newMode)
       }
     })
@@ -451,6 +473,27 @@ onMounted(() => {
                 meshMap.set(obj.id, mesh)
               }
             })
+          } else if (obj.type === 'perspective-camera' || obj.type === 'orthographic-camera') {
+            // Handle camera type - async creation
+            createCameraMesh(obj).then(mesh => {
+              if (mesh && !meshMap.has(obj.id)) {
+                // Add to scene or parent mesh
+                if (obj.parent) {
+                  const parentMesh = meshMap.get(obj.parent)
+                  if (parentMesh) {
+                    parentMesh.add(mesh)
+                  } else {
+                    scene.add(mesh)
+                  }
+                } else {
+                  scene.add(mesh)
+                }
+                
+                meshMap.set(obj.id, mesh)
+              }
+            }).catch(error => {
+              console.error('Failed to create camera mesh:', error)
+            })
           } else if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
             
@@ -470,36 +513,43 @@ onMounted(() => {
               opacity: obj.opacity
             })
             const mesh = new THREE.Mesh(geometry, material)
+            mesh.userData.sceneObjectId = obj.id
             
-            // Apply pivot offset to geometry (inverted)
-            geometry.translate(
+            // Create nested container structure for pivot offset
+            // Inner container holds the visual mesh with offset
+            const pivotContainer = new THREE.Object3D()
+            pivotContainer.position.set(
               -obj.pivotOffset.x,
               -obj.pivotOffset.y,
               -obj.pivotOffset.z
             )
+            pivotContainer.add(mesh)
             
-            mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
-            mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
-            mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+            // Outer container applies user transforms
+            const container = new THREE.Object3D()
+            container.add(pivotContainer)
+            container.position.set(obj.position.x, obj.position.y, obj.position.z)
+            container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
+            container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
             
-            // Store reference to scene object for picking
-            mesh.userData.sceneObjectId = obj.id
-            // Store initial pivot offset for change tracking
-            mesh.userData.pivotOffset = { ...obj.pivotOffset }
+            // Store references
+            container.userData.sceneObjectId = obj.id
+            container.userData.pivotOffset = { ...obj.pivotOffset }
+            container.userData.pivotContainer = pivotContainer
             
             // Add to scene or parent mesh
             if (obj.parent) {
               const parentMesh = meshMap.get(obj.parent)
               if (parentMesh) {
-                parentMesh.add(mesh)
+                parentMesh.add(container)
               } else {
-                scene.add(mesh)
+                scene.add(container)
               }
             } else {
-              scene.add(mesh)
+              scene.add(container)
             }
             
-            meshMap.set(obj.id, mesh)
+            meshMap.set(obj.id, container)
           }
         }
       })
@@ -713,6 +763,10 @@ onMounted(() => {
       
       // Transform shortcuts - work when an object is selected
       if (selectedObject.value) {
+        // Check if the selected object is a camera
+        const isCamera = selectedObject.value.type === 'perspective-camera' ||
+                        selectedObject.value.type === 'orthographic-camera'
+        
         // Transform mode shortcuts
         if (key === 't') {
           transformMode.value = 'translate'
@@ -722,7 +776,8 @@ onMounted(() => {
           transformMode.value = 'rotate'
           return
         }
-        if (key === 's') {
+        if (key === 's' && !isCamera) {
+          // Only allow scale mode for non-camera objects
           transformMode.value = 'scale'
           return
         }
@@ -847,55 +902,24 @@ onMounted(() => {
               }
             }
             
-            // For children, inherit the parent's pivot (if obj.parent exists, use parent pivot)
-            // For root objects, use their own pivot
+            // Update pivot offset dynamically using the pivot container
             const effectivePivotOffset = obj.parent ? parentPivotOffset : (obj.pivotOffset || { x: 0, y: -0.5, z: 0 })
             const currentPivot = mesh.userData.pivotOffset || { x: 0, y: -0.5, z: 0 }
             
+            // Update pivot container position if pivot offset changed
             if (effectivePivotOffset.x !== currentPivot.x ||
                 effectivePivotOffset.y !== currentPivot.y ||
                 effectivePivotOffset.z !== currentPivot.z) {
-              // Dispose old geometry and create new one with correct pivot offset
-              mesh.geometry.dispose()
-              const newGeometry = new THREE.BoxGeometry(1, 1, 1)
-              newGeometry.translate(-effectivePivotOffset.x, -effectivePivotOffset.y, -effectivePivotOffset.z)
-              mesh.geometry = newGeometry
-              
-              // Store current pivot offset
-              mesh.userData.pivotOffset = { ...effectivePivotOffset }
-              
-              // Update outline if this object is selected
-              if (selectedObject.value && selectedObject.value.id === obj.id) {
-                // Find and update the outline for this mesh
-                const outline = selectionOutlines.find(o => o.parent === mesh)
-                if (outline) {
-                  // Remove old outline
-                  mesh.remove(outline)
-                  outline.geometry.dispose()
-                  outline.material.dispose()
-                  
-                  // Create new outline with updated geometry
-                  const edges = new THREE.EdgesGeometry(mesh.geometry, 15)
-                  const lineMaterial = new THREE.LineBasicMaterial({
-                    color: 0xffaa00,
-                    linewidth: 2
-                  })
-                  const newOutline = new THREE.LineSegments(edges, lineMaterial)
-                  newOutline.position.set(0, 0, 0)
-                  newOutline.rotation.set(0, 0, 0)
-                  newOutline.scale.set(1, 1, 1)
-                  mesh.add(newOutline)
-                  
-                  // Replace in selectionOutlines array
-                  const index = selectionOutlines.indexOf(outline)
-                  if (index > -1) {
-                    selectionOutlines[index] = newOutline
-                  }
-                }
+              // Update the pivot container's position
+              if (mesh.userData.pivotContainer) {
+                mesh.userData.pivotContainer.position.set(
+                  -effectivePivotOffset.x,
+                  -effectivePivotOffset.y,
+                  -effectivePivotOffset.z
+                )
               }
+              mesh.userData.pivotOffset = { ...effectivePivotOffset }
             }
-            
-            // Outline is now a child of the mesh, so it follows automatically
             
             // Pass down the pivot offset from parent (or this object if it has children)
             const pivotForChildren = obj.pivotOffset || effectivePivotOffset
@@ -977,6 +1001,7 @@ onUnmounted(() => {
             Rotate
           </button>
           <button
+            v-if="selectedObject.type !== 'perspective-camera' && selectedObject.type !== 'orthographic-camera'"
             @click="transformMode = 'scale'"
             :class="['px-2 py-0.5 text-xs rounded', transformMode === 'scale' ? 'bg-[#3c8edb] text-white' : 'bg-[#1a1a1a] hover:bg-[#333]']"
             title="Scale (S)"

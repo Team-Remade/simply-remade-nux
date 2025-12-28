@@ -5,6 +5,9 @@ import icon from '../../resources/appIcon01.png?asset'
 import AdmZip from 'adm-zip'
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from 'fs'
 
+// Track all preview windows
+const previewWindows = new Set()
+
 // Enable hardware acceleration optimizations
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
@@ -55,6 +58,16 @@ function createWindow() {
 
   mainWindow.on('unmaximize', () => {
     mainWindow.webContents.send('window-unmaximized')
+  })
+
+  // Close all preview windows when main window closes
+  mainWindow.on('close', () => {
+    previewWindows.forEach(previewWin => {
+      if (previewWin && !previewWin.isDestroyed()) {
+        previewWin.close()
+      }
+    })
+    previewWindows.clear()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -780,6 +793,49 @@ app.whenReady().then(() => {
   ipcMain.on('close-window', () => {
     const window = BrowserWindow.getFocusedWindow()
     if (window) window.close()
+  })
+
+  // Handler to create a new preview window
+  ipcMain.handle('create-preview-window', async () => {
+    try {
+      const previewWindow = new BrowserWindow({
+        width: 800,
+        height: 600,
+        autoHideMenuBar: true,
+        icon: icon,
+        webPreferences: {
+          preload: join(__dirname, '../preload/index.js'),
+          sandbox: false,
+          webgl: true,
+          acceleratedGraphics: true,
+          hardwareAcceleration: true
+        },
+        backgroundColor: '#2c2e29',
+        titleBarStyle: 'hidden'
+      })
+
+      // Track preview window
+      previewWindows.add(previewWindow)
+
+      // Remove from tracking when closed
+      previewWindow.on('closed', () => {
+        previewWindows.delete(previewWindow)
+      })
+
+      // Load preview page with URL parameter
+      if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+        previewWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '?preview=true')
+      } else {
+        previewWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+          query: { preview: 'true' }
+        })
+      }
+
+      return { success: true }
+    } catch (error) {
+      console.error('Error creating preview window:', error)
+      return { success: false, error: error.message }
+    }
   })
 
   createWindow()

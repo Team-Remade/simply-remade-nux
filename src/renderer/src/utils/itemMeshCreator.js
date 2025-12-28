@@ -55,13 +55,6 @@ const createGeneratedItemMesh = async (texture, obj) => {
     // Create a simple flat plane with the texture
     const geometry = new THREE.PlaneGeometry(1, 1)
     
-    // Apply pivot offset to geometry (inverted)
-    geometry.translate(
-      -obj.pivotOffset.x,
-      -obj.pivotOffset.y,
-      -obj.pivotOffset.z
-    )
-    
     const material = new THREE.MeshStandardMaterial({
       map: texture,
       transparent: true,
@@ -71,20 +64,31 @@ const createGeneratedItemMesh = async (texture, obj) => {
     })
     
     const mesh = new THREE.Mesh(geometry, material)
+    mesh.userData.sceneObjectId = obj.id
     
-    // Create parent container for transforms
+    // Create nested container structure for pivot offset
+    // Inner container holds the visual mesh with offset
+    const pivotContainer = new THREE.Object3D()
+    pivotContainer.position.set(
+      -obj.pivotOffset.x,
+      -obj.pivotOffset.y,
+      -obj.pivotOffset.z
+    )
+    pivotContainer.add(mesh)
+    
+    // Outer container applies user transforms
     const container = new THREE.Object3D()
-    container.add(mesh)
+    container.add(pivotContainer)
     
     // Apply user transforms to container
     container.position.set(obj.position.x, obj.position.y, obj.position.z)
     container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
     container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
     
-    // Store reference to scene object for picking
+    // Store references
     container.userData.sceneObjectId = obj.id
-    mesh.userData.sceneObjectId = obj.id
     container.userData.pivotOffset = { ...obj.pivotOffset }
+    container.userData.pivotContainer = pivotContainer
     
     return container
   }
@@ -145,25 +149,29 @@ const createGeneratedItemMesh = async (texture, obj) => {
     }
   }
   
-  // Apply pivot offset to the entire group
-  group.position.set(
+  // Create nested container structure for pivot offset
+  // Inner container holds the visual mesh with offset
+  const pivotContainer = new THREE.Object3D()
+  pivotContainer.position.set(
     -obj.pivotOffset.x,
     -obj.pivotOffset.y,
     -obj.pivotOffset.z
   )
+  pivotContainer.add(group)
   
-  // Create parent container for transforms
+  // Outer container applies user transforms
   const container = new THREE.Object3D()
-  container.add(group)
+  container.add(pivotContainer)
   
   // Apply user transforms to container
   container.position.set(obj.position.x, obj.position.y, obj.position.z)
   container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
   container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
   
-  // Store reference to scene object for picking
+  // Store references
   container.userData.sceneObjectId = obj.id
   container.userData.pivotOffset = { ...obj.pivotOffset }
+  container.userData.pivotContainer = pivotContainer
   container.userData.isGroup = true
   
   return container
@@ -438,25 +446,29 @@ export const createItemMesh = async (obj, window) => {
         }
       }
       
-      // Apply pivot offset to the entire group
-      group.position.set(
+      // Create nested container structure for pivot offset
+      // Inner container holds the visual mesh with offset
+      const pivotContainer = new THREE.Object3D()
+      pivotContainer.position.set(
         -obj.pivotOffset.x,
         -obj.pivotOffset.y,
         -obj.pivotOffset.z
       )
+      pivotContainer.add(group)
       
-      // Set transform
+      // Outer container applies user transforms
       const container = new THREE.Object3D()
-      container.add(group)
+      container.add(pivotContainer)
       
       // Apply user transforms to container
       container.position.set(obj.position.x, obj.position.y, obj.position.z)
       container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
       container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
       
-      // Store reference to scene object for picking
+      // Store references
       container.userData.sceneObjectId = obj.id
       container.userData.pivotOffset = { ...obj.pivotOffset }
+      container.userData.pivotContainer = pivotContainer
       container.userData.isGroup = true
       
       return container

@@ -7,7 +7,8 @@ const api = {
   getItems: () => ipcRenderer.invoke('get-items'),
   getDataDir: () => ipcRenderer.invoke('get-data-dir'),
   loadBlockModel: (blockPath) => ipcRenderer.invoke('load-block-model', blockPath),
-  loadTexture: (texturePath) => ipcRenderer.invoke('load-texture', texturePath)
+  loadTexture: (texturePath) => ipcRenderer.invoke('load-texture', texturePath),
+  createPreviewWindow: () => ipcRenderer.invoke('create-preview-window')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

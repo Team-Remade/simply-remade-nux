@@ -479,7 +479,7 @@ const handleBackgroundImageChange = (event) => {
           </div>
         </div>
         
-        <div class="mb-3">
+        <div v-if="selectedObject.type !== 'perspective-camera' && selectedObject.type !== 'orthographic-camera'" class="mb-3">
           <div class="text-[#aaa] text-xs mb-1">Scale</div>
           <div class="grid grid-cols-3 gap-1">
             <input type="number" v-model.number="scaleX" placeholder="X"

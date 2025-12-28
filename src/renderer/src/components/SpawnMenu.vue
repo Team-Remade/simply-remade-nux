@@ -13,6 +13,8 @@ const emit = defineEmits(['close', 'spawn'])
 // Inject scene state
 const sceneObjects = inject('sceneObjects')
 const selectObject = inject('selectObject')
+const viewportCamera = inject('viewportCamera', null)
+const viewportControls = inject('viewportControls', null)
 
 const selectedCategory = ref('Primitives')
 const selectedItem = ref(null)
@@ -207,6 +209,9 @@ const currentCategoryItems = computed(() => {
   
   //Helper function to check if item should be shown
   const shouldShowItem = (item) => {
+    // Skip headers
+    if (item.isHeader) return true
+    
     // For items, only show if texture is loaded
     if (item.type === 'item') {
       return !!itemTextures.value[item.id]
@@ -215,8 +220,17 @@ const currentCategoryItems = computed(() => {
     return true
   }
   
+  // Check if this category has headers (like Blocks and Items)
+  const hasHeaders = items.some(item => item.isHeader)
+  
   // If search query is empty, filter by texture availability
   if (!searchQuery.value.trim()) {
+    // If no headers, just filter items directly
+    if (!hasHeaders) {
+      return items.filter(shouldShowItem)
+    }
+    
+    // With headers, use the grouped filtering logic
     const filtered = []
     let currentHeader = null
     const categoryItems = []
@@ -248,6 +262,15 @@ const currentCategoryItems = computed(() => {
   
   // Filter items based on search query AND texture availability
   const query = searchQuery.value.toLowerCase().trim()
+  
+  // If no headers, just filter items directly by name
+  if (!hasHeaders) {
+    return items.filter(item =>
+      item.name.toLowerCase().includes(query) && shouldShowItem(item)
+    )
+  }
+  
+  // With headers, use the grouped filtering logic
   const filtered = []
   let currentHeader = null
   const categoryItems = []
@@ -292,13 +315,32 @@ const selectItem = (item) => {
 const createObject = () => {
   if (!selectedItem.value) return
   
+  // Check if spawning a camera - use viewport camera's position and rotation
+  const isCameraType = selectedItem.value.type === 'perspective-camera' || selectedItem.value.type === 'orthographic-camera'
+  let cameraPosition = { x: 0, y: 0, z: 0 }
+  let cameraRotation = { x: 0, y: 0, z: 0 }
+  
+  if (isCameraType && viewportCamera?.value && viewportControls?.value) {
+    cameraPosition = {
+      x: viewportCamera.value.position.x,
+      y: viewportCamera.value.position.y,
+      z: viewportCamera.value.position.z
+    }
+    // Use yaw and pitch from controls for accurate rotation
+    cameraRotation = {
+      x: viewportControls.value.pitch,
+      y: viewportControls.value.yaw,
+      z: 0
+    }
+  }
+  
   // Add object to scene
   const newObject = {
     id: Date.now().toString(),
     name: selectedItem.value.name,
     type: selectedItem.value.type,
-    position: { x: 0, y: 0, z: 0 },
-    rotation: { x: 0, y: 0, z: 0 },
+    position: isCameraType ? cameraPosition : { x: 0, y: 0, z: 0 },
+    rotation: isCameraType ? cameraRotation : { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1, z: 1 },
     pivotOffset: { x: 0, y: -0.5, z: 0 },
     parent: null,
@@ -326,6 +368,12 @@ const createObject = () => {
     newObject.useGenerated = selectedItem.value.useGenerated || false
     newObject.itemRenderMode = itemRenderMode.value // 'voxel' or 'plane'
     newObject.itemTextureSource = itemTextureSource.value // 'item' or 'block'
+  }
+  
+  // Mark camera objects with centered pivot offset
+  if (selectedItem.value.type === 'perspective-camera' || selectedItem.value.type === 'orthographic-camera') {
+    // Camera-specific pivot offset (centered)
+    newObject.pivotOffset = { x: 0, y: 0, z: 0 }
   }
   
   sceneObjects.value.push(newObject)
@@ -395,7 +443,7 @@ const closeMenu = () => {
         </div>
       </div>
       <div class="flex-1 overflow-y-auto p-1.5">
-        <template v-for="item in currentCategoryItems" :key="item.id">
+        <template v-for="item in currentCategoryItems" :key="item.id || item.type">
           <!-- Subcategory Header -->
           <div
             v-if="item.isHeader"
