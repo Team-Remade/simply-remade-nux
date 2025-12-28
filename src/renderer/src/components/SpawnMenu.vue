@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, inject, onMounted } from 'vue'
+import { ref, computed, inject, onMounted, watch } from 'vue'
 
 defineProps({
   show: {
@@ -19,6 +19,7 @@ const selectedItem = ref(null)
 const selectedState = ref(null)
 const searchQuery = ref('')
 const itemRenderMode = ref('voxel') // 'voxel' or 'plane'
+const itemTextureSource = ref('item') // 'item' or 'block'
 const blocks = ref([])
 const items = ref([])
 const itemTextures = ref({}) // Store loaded textures for items
@@ -62,24 +63,54 @@ onMounted(async () => {
 })
 
 // Function to load item texture
-const loadItemTexture = async (item) => {
+const loadItemTexture = async (item, textureSource = 'item') => {
   try {
     // Load the item model to get the texture
     const itemModel = await window.api.loadBlockModel(item.itemPath)
     if (itemModel && itemModel.textures) {
       // Get layer0 texture (main texture for items)
-      const textureRef = itemModel.textures.layer0
+      let textureRef = itemModel.textures.layer0
       if (textureRef) {
+        // Replace /item/ with /block/ if using block textures
+        if (textureSource === 'block') {
+          textureRef = textureRef.replace(/\/item\//, '/block/')
+          // Skip if the texture path still contains 'item' after replacement
+          if (textureRef.includes('item')) {
+            delete itemTextures.value[item.id]
+            return
+          }
+        }
+        
         const textureData = await window.api.loadTexture(textureRef)
-        if (textureData && textureData.data) {
+        // Only add texture if successfully loaded and not using fallback
+        if (textureData && textureData.data && !textureData.error) {
           itemTextures.value[item.id] = 'data:image/png;base64,' + textureData.data
+        } else {
+          // If texture failed to load, ensure it's not in the map
+          delete itemTextures.value[item.id]
         }
       }
     }
   } catch (error) {
     console.error('Failed to load texture for item:', item.name, error)
+    // Remove texture if it fails to load
+    delete itemTextures.value[item.id]
   }
 }
+
+// Watch for texture source changes and reload item textures
+watch(itemTextureSource, async (newSource) => {
+  // Create a completely new empty object to force reactivity
+  itemTextures.value = {}
+  
+  // Small delay to ensure reactivity updates
+  await new Promise(resolve => setTimeout(resolve, 10))
+  
+  // Reload all item textures with new source
+  for (const item of items.value) {
+    await loadItemTexture(item, newSource)
+  }
+})
 
 // Object categories and items
 const spawnCategories = computed(() => {
@@ -174,12 +205,48 @@ const categoryList = computed(() => Object.keys(spawnCategories.value))
 const currentCategoryItems = computed(() => {
   const items = spawnCategories.value[selectedCategory.value] || []
   
-  // If search query is empty, return all items
-  if (!searchQuery.value.trim()) {
-    return items
+  //Helper function to check if item should be shown
+  const shouldShowItem = (item) => {
+    // For items, only show if texture is loaded
+    if (item.type === 'item') {
+      return !!itemTextures.value[item.id]
+    }
+    // For other types, always show
+    return true
   }
   
-  // Filter items based on search query
+  // If search query is empty, filter by texture availability
+  if (!searchQuery.value.trim()) {
+    const filtered = []
+    let currentHeader = null
+    const categoryItems = []
+    
+    items.forEach((item) => {
+      if (item.isHeader) {
+        // If we have a previous header with items, add them to filtered
+        if (currentHeader && categoryItems.length > 0) {
+          filtered.push(currentHeader)
+          filtered.push(...categoryItems)
+        }
+        // Start new category
+        currentHeader = item
+        categoryItems.length = 0
+      } else if (shouldShowItem(item)) {
+        // Add item if it should be shown
+        categoryItems.push(item)
+      }
+    })
+    
+    // Don't forget the last category
+    if (currentHeader && categoryItems.length > 0) {
+      filtered.push(currentHeader)
+      filtered.push(...categoryItems)
+    }
+    
+    return filtered
+  }
+  
+  // Filter items based on search query AND texture availability
   const query = searchQuery.value.toLowerCase().trim()
   const filtered = []
   let currentHeader = null
@@ -195,8 +262,8 @@ const currentCategoryItems = computed(() => {
       // Start new category
       currentHeader = item
       categoryItems.length = 0
-    } else if (item.name.toLowerCase().includes(query)) {
-      // Add matching item to current category
+    } else if (item.name.toLowerCase().includes(query) && shouldShowItem(item)) {
+      // Add matching item to current category if it should be shown
       categoryItems.push(item)
     }
   })
@@ -258,6 +325,7 @@ const createObject = () => {
     newObject.itemPath = selectedItem.value.itemPath
     newObject.useGenerated = selectedItem.value.useGenerated || false
     newObject.itemRenderMode = itemRenderMode.value // 'voxel' or 'plane'
+    newObject.itemTextureSource = itemTextureSource.value // 'item' or 'block'
   }
   
   sceneObjects.value.push(newObject)
@@ -306,6 +374,16 @@ const closeMenu = () => {
         <div class="p-1.5 text-[#aaa] text-xs font-semibold">
           {{ selectedCategory }}
         </div>
+        <!-- Texture Source Selector (for Items category) -->
+        <div v-if="selectedCategory === 'Items'" class="px-1.5 pb-1.5">
+          <select
+            v-model="itemTextureSource"
+            class="w-full px-2 py-1.5 text-xs bg-[#1a1a1a] border border-[#3c3c3c] rounded text-[#aaa] focus:outline-none focus:border-[#3c8edb]"
+          >
+            <option value="item">Item Textures</option>
+            <option value="block">Block Textures</option>
+          </select>
+        </div>
         <div class="px-1.5 pb-1.5">
           <input
             v-model.trim="searchQuery"
@@ -325,7 +403,7 @@ const closeMenu = () => {
           >
             {{ item.name }}
           </div>
-          <!-- Item Button with Texture (for items) -->
+          <!-- Item Button with Texture (for items) - only show if texture loaded -->
           <button
             v-else-if="item.type === 'item' && itemTextures[item.id]"
             @click="selectItem(item)"
@@ -344,9 +422,9 @@ const closeMenu = () => {
             />
             <span>{{ item.name }}</span>
           </button>
-          <!-- Regular Item Button (for blocks and other objects) -->
+          <!-- Regular Item Button (for blocks and other non-item objects) -->
           <button
-            v-else-if="!item.isHeader"
+            v-else-if="!item.isHeader && item.type !== 'item'"
             @click="selectItem(item)"
             :class="[
               'w-full text-left px-2 py-1.5 text-xs rounded mb-0.5 transition-colors',

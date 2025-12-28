@@ -196,7 +196,15 @@ export const createItemMesh = async (obj, window) => {
       
       // For generated models, we just need the layer0 texture
       if (itemModel.textures && itemModel.textures.layer0) {
-        const textureData = await window.api.loadTexture(itemModel.textures.layer0)
+        // Check if we should use block textures instead of item textures
+        let textureRef = itemModel.textures.layer0
+        if (obj.itemTextureSource === 'block') {
+          // Replace 'item/' with 'block/' in the texture path
+          textureRef = textureRef.replace(/item\//, 'block/')
+          console.log('Using block texture:', textureRef)
+        }
+        
+        const textureData = await window.api.loadTexture(textureRef)
         const texture = await loadTextureFromData(textureData)
         
         if (texture) {
