@@ -18,6 +18,9 @@ let broadcastChannel = null
 // Track if preview is popped out
 const isPreviewPoppedOut = ref(false)
 
+// Track if preview viewport is visible
+const isPreviewVisible = ref(true)
+
 // Preview viewport dragging and resizing state
 const previewViewportRef = ref(null)
 const viewportContainerRef = ref(null)
@@ -43,11 +46,15 @@ provide('selectedObject', selectedObject)
 provide('currentFrame', currentFrame)
 provide('projectSettings', projectSettings)
 provide('isPreviewPoppedOut', isPreviewPoppedOut)
+provide('isPreviewVisible', isPreviewVisible)
 provide('selectObject', (obj) => {
   selectedObject.value = obj
 })
 provide('togglePreviewPopout', (shouldPopout) => {
   isPreviewPoppedOut.value = shouldPopout
+})
+provide('togglePreviewVisibility', () => {
+  isPreviewVisible.value = !isPreviewVisible.value
 })
 
 // Function to set parent for a scene object
@@ -418,7 +425,7 @@ onUnmounted(() => {
           <Viewport />
           <!-- Preview Viewport as draggable and resizable overlay -->
           <div
-            v-if="!isPreviewPoppedOut"
+            v-if="!isPreviewPoppedOut && isPreviewVisible"
             ref="previewViewportRef"
             @mousedown="handlePreviewMouseDown"
             class="absolute shadow-lg transition-all"

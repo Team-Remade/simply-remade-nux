@@ -3,16 +3,27 @@ import { ref, inject, watch, onMounted, onUnmounted, computed } from 'vue'
 import * as THREE from 'three'
 import { createBlockMesh } from '../utils/blockMeshCreator'
 import { createItemMesh } from '../utils/itemMeshCreator'
+import { createLightMesh } from '../utils/lightMeshCreator'
 
 const canvasContainer = ref(null)
-let scene, camera, renderer, animationId, handleResize, resizeObserver
+let scene, camera, renderer, animationId, handleResize, resizeObserver, handleTogglePreviewRender, handleKeyDown
 let backgroundPlane = null
+let ambientLight, directionalLight
+
+// Render mode state - true for complex lighting, false for unlit
+const isComplexLighting = ref(false)
+
+// FPS tracking
+const fps = ref(0)
+let frameCount = 0
+let fpsUpdateTime = performance.now()
 
 // Inject scene state
 const sceneObjects = inject('sceneObjects')
 const projectSettings = inject('projectSettings')
 const isPreviewPoppedOut = inject('isPreviewPoppedOut', ref(false))
 const togglePreviewPopout = inject('togglePreviewPopout', null)
+const isPreviewVisible = inject('isPreviewVisible', ref(true))
 
 // Check if we're in a standalone preview window (no togglePreviewPopout means we're in PreviewWindow.vue)
 const isStandalone = !togglePreviewPopout
@@ -121,10 +132,10 @@ onMounted(() => {
     canvasContainer.value.appendChild(renderer.domElement)
 
     // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3)
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.3)
     scene.add(ambientLight)
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2)
+    directionalLight = new THREE.DirectionalLight(0xffffff, 1.2)
     directionalLight.position.set(5, 10, 7)
     scene.add(directionalLight)
 
@@ -280,6 +291,41 @@ onMounted(() => {
                 meshMap.set(obj.id, mesh)
               }
             })
+          } else if (obj.type === 'pointlight') {
+            // Handle point light type - only create the actual light, not the billboard
+            createLightMesh(obj).then(container => {
+              if (container && !meshMap.has(obj.id)) {
+                // Get the light from the container (not the billboard)
+                const light = container.userData.light
+                
+                if (light) {
+                  // Create a simple container for the light only
+                  const lightContainer = new THREE.Object3D()
+                  lightContainer.add(light)
+                  lightContainer.position.set(obj.position.x, obj.position.y, obj.position.z)
+                  
+                  // Store references
+                  lightContainer.userData.sceneObjectId = obj.id
+                  lightContainer.userData.isLight = true
+                  lightContainer.userData.light = light
+                  
+                  if (obj.parent) {
+                    const parentMesh = meshMap.get(obj.parent)
+                    if (parentMesh) {
+                      parentMesh.add(lightContainer)
+                    } else {
+                      scene.add(lightContainer)
+                    }
+                  } else {
+                    scene.add(lightContainer)
+                  }
+                  
+                  meshMap.set(obj.id, lightContainer)
+                }
+              }
+            }).catch(error => {
+              console.error('Failed to create light mesh:', error)
+            })
           } else if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
             
@@ -375,6 +421,18 @@ onMounted(() => {
     // Animation loop
     const animate = () => {
       animationId = requestAnimationFrame(animate)
+      
+      // Calculate FPS
+      const currentTime = performance.now()
+      frameCount++
+      
+      // Update FPS every 500ms
+      if (currentTime - fpsUpdateTime >= 500) {
+        fps.value = Math.round((frameCount * 1000) / (currentTime - fpsUpdateTime))
+        frameCount = 0
+        fpsUpdateTime = currentTime
+      }
+      lastFrameTime = currentTime
 
       // Update camera from selected scene camera object
       if (selectedCamera.value) {
@@ -497,6 +555,20 @@ onMounted(() => {
               mesh.userData.pivotOffset = { ...effectivePivotOffset }
             }
             
+            // Update light properties if this is a light object
+            if (mesh.userData.isLight && mesh.userData.light) {
+              const light = mesh.userData.light
+              if (obj.lightColor !== undefined) {
+                light.color.set(obj.lightColor)
+              }
+              if (obj.lightIntensity !== undefined) {
+                light.intensity = obj.lightIntensity
+              }
+              if (obj.lightDistance !== undefined) {
+                light.distance = obj.lightDistance
+              }
+            }
+            
             const pivotForChildren = obj.pivotOffset || effectivePivotOffset
             
             if (obj.children && obj.children.length > 0) {
@@ -543,6 +615,67 @@ onMounted(() => {
       handleResize()
     })
     resizeObserver.observe(canvasContainer.value)
+
+    // Toggle render mode function
+    const toggleRenderMode = () => {
+      isComplexLighting.value = !isComplexLighting.value
+      
+      if (isComplexLighting.value) {
+        // Enable complex lighting - enable user-spawned lights
+        // (Basic scene lights stay on always)
+        scene.traverse((object) => {
+          // Only toggle user-spawned lights, not the basic scene lights
+          if (object.isLight && object !== ambientLight && object !== directionalLight) {
+            object.visible = true
+          }
+        })
+      } else {
+        // Disable complex lighting (unlit mode) - disable only user-spawned lights
+        // Basic scene lights remain visible for basic shading
+        scene.traverse((object) => {
+          // Only toggle user-spawned lights, not the basic scene lights
+          if (object.isLight && object !== ambientLight && object !== directionalLight) {
+            object.visible = false
+          }
+        })
+      }
+      
+      console.log('Preview render mode toggled:', isComplexLighting.value ? 'Complex Lighting' : 'Unlit (Performance Mode)')
+    }
+
+    // Watch for preview visibility changes - force unlit when invisible
+    watch(isPreviewVisible, (visible) => {
+      if (!visible && isComplexLighting.value) {
+        // Force unlit mode when preview becomes invisible
+        isComplexLighting.value = false
+        scene.traverse((object) => {
+          if (object.isLight && object !== ambientLight && object !== directionalLight) {
+            object.visible = false
+          }
+        })
+        console.log('Preview forced to unlit mode (hidden)')
+      }
+    })
+
+
+    // Listen for toggle event from main viewport (when embedded in main window)
+    handleTogglePreviewRender = () => {
+      if (scene) {
+        toggleRenderMode()
+      }
+    }
+    window.addEventListener('toggle-preview-render', handleTogglePreviewRender)
+    
+    // Add F5 keyboard listener only for standalone window
+    if (isStandalone) {
+      handleKeyDown = (event) => {
+        if (event.key === 'F5') {
+          event.preventDefault()
+          toggleRenderMode()
+        }
+      }
+      window.addEventListener('keydown', handleKeyDown)
+    }
   }
 })
 
@@ -560,6 +693,16 @@ onUnmounted(() => {
   if (resizeObserver && canvasContainer.value) {
     resizeObserver.unobserve(canvasContainer.value)
     resizeObserver.disconnect()
+  }
+  
+  // Remove toggle event listener
+  if (handleTogglePreviewRender) {
+    window.removeEventListener('toggle-preview-render', handleTogglePreviewRender)
+  }
+  
+  // Remove keyboard event listener
+  if (handleKeyDown) {
+    window.removeEventListener('keydown', handleKeyDown)
   }
   
   // Clean up meshes
@@ -612,11 +755,17 @@ onUnmounted(() => {
       </div>
     </div>
     <div ref="canvasContainer" class="w-full h-full relative">
-      <div 
+      <div
         v-if="availableCameras.length === 0"
         class="absolute inset-0 flex items-center justify-center text-[#666] text-sm"
       >
         Add a camera to the scene to see preview
+      </div>
+      <div
+        v-if="isComplexLighting"
+        class="absolute top-2 right-2 bg-[#1a1a1a]/80 text-[#aaa] px-2 py-1 text-xs rounded border border-[#3c3c3c] pointer-events-none"
+      >
+        FPS: {{ fps }}
       </div>
     </div>
   </div>

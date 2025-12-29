@@ -1,9 +1,13 @@
 <script setup>
 import { inject, computed, ref } from 'vue'
+import { useKeyframes } from '../composables/useKeyframes'
 
 // Inject from App.vue
 const selectedObject = inject('selectedObject')
 const projectSettings = inject('projectSettings')
+
+// Use keyframe composable
+const { addKeyframeAtCurrentFrame } = useKeyframes()
 
 // Active tab state
 const activeTab = ref('project')
@@ -39,6 +43,7 @@ const positionX = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.position.x = parseFloat(val) / 16
+      addKeyframeAtCurrentFrame(selectedObject.value, 'position', 'x')
     }
   }
 })
@@ -48,6 +53,7 @@ const positionY = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.position.y = parseFloat(val) / 16
+      addKeyframeAtCurrentFrame(selectedObject.value, 'position', 'y')
     }
   }
 })
@@ -57,6 +63,7 @@ const positionZ = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.position.z = parseFloat(val) / 16
+      addKeyframeAtCurrentFrame(selectedObject.value, 'position', 'z')
     }
   }
 })
@@ -67,6 +74,7 @@ const rotationX = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.rotation.x = parseFloat(val) * Math.PI / 180
+      addKeyframeAtCurrentFrame(selectedObject.value, 'rotation', 'x')
     }
   }
 })
@@ -76,6 +84,7 @@ const rotationY = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.rotation.y = parseFloat(val) * Math.PI / 180
+      addKeyframeAtCurrentFrame(selectedObject.value, 'rotation', 'y')
     }
   }
 })
@@ -85,6 +94,7 @@ const rotationZ = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.rotation.z = parseFloat(val) * Math.PI / 180
+      addKeyframeAtCurrentFrame(selectedObject.value, 'rotation', 'z')
     }
   }
 })
@@ -95,6 +105,7 @@ const scaleX = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.scale.x = parseFloat(val)
+      addKeyframeAtCurrentFrame(selectedObject.value, 'scale', 'x')
     }
   }
 })
@@ -104,6 +115,7 @@ const scaleY = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.scale.y = parseFloat(val)
+      addKeyframeAtCurrentFrame(selectedObject.value, 'scale', 'y')
     }
   }
 })
@@ -113,6 +125,7 @@ const scaleZ = computed({
   set: (val) => {
     if (selectedObject.value) {
       selectedObject.value.scale.z = parseFloat(val)
+      addKeyframeAtCurrentFrame(selectedObject.value, 'scale', 'z')
     }
   }
 })
@@ -129,6 +142,7 @@ const opacity = computed({
     if (selectedObject.value) {
       // Convert percentage (0-100) to decimal (0-1)
       selectedObject.value.opacity = parseFloat(val) / 100
+      addKeyframeAtCurrentFrame(selectedObject.value, 'opacity', null)
     }
   }
 })
@@ -187,6 +201,37 @@ const pivotOffsetZ = computed({
       // Handle empty/NaN values by defaulting to 0
       const parsedVal = parseFloat(val)
       selectedObject.value.pivotOffset.z = isNaN(parsedVal) ? 0 : parsedVal / 16
+    }
+  }
+})
+
+// Light properties
+const lightColor = computed({
+  get: () => selectedObject.value?.lightColor || '#ffffff',
+  set: (val) => {
+    if (selectedObject.value) {
+      selectedObject.value.lightColor = val
+      addKeyframeAtCurrentFrame(selectedObject.value, 'lightColor', null)
+    }
+  }
+})
+
+const lightIntensity = computed({
+  get: () => selectedObject.value?.lightIntensity !== undefined ? selectedObject.value.lightIntensity : 10,
+  set: (val) => {
+    if (selectedObject.value) {
+      selectedObject.value.lightIntensity = parseFloat(val)
+      addKeyframeAtCurrentFrame(selectedObject.value, 'lightIntensity', null)
+    }
+  }
+})
+
+const lightDistance = computed({
+  get: () => selectedObject.value?.lightDistance || 0,
+  set: (val) => {
+    if (selectedObject.value) {
+      selectedObject.value.lightDistance = parseFloat(val)
+      addKeyframeAtCurrentFrame(selectedObject.value, 'lightDistance', null)
     }
   }
 })
@@ -514,6 +559,42 @@ const handleBackgroundImageChange = (event) => {
           <div class="text-[#aaa] text-xs mb-1">Opacity (%)</div>
           <input type="number" v-model.number="opacity" placeholder="100" min="0" max="100" step="1"
             class="w-full bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
+        </div>
+        
+        <!-- Light Settings (only for point lights) -->
+        <div v-if="selectedObject.type === 'pointlight'">
+          <div class="text-white text-[13px] font-medium mb-3 pb-1 border-b border-[#3c3c3c]">
+            Light Settings
+          </div>
+          
+          <div class="mb-3">
+            <div class="text-[#aaa] text-xs mb-1">Light Color</div>
+            <div class="flex gap-2">
+              <input
+                type="color"
+                v-model="lightColor"
+                class="w-10 h-7 bg-[#1a1a1a] border border-[#3c3c3c] rounded-sm cursor-pointer"
+              />
+              <input
+                type="text"
+                v-model="lightColor"
+                placeholder="#ffffff"
+                class="flex-1 bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]"
+              />
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <div class="text-[#aaa] text-xs mb-1">Intensity</div>
+            <input type="number" v-model.number="lightIntensity" placeholder="1" min="0" step="0.1"
+              class="w-full bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
+          </div>
+          
+          <div class="mb-3">
+            <div class="text-[#aaa] text-xs mb-1">Distance (0 = infinite)</div>
+            <input type="number" v-model.number="lightDistance" placeholder="0" min="0" step="1"
+              class="w-full bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99] placeholder:text-[#666]" />
+          </div>
         </div>
       </div>
     </div>

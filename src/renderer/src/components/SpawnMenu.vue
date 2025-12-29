@@ -376,6 +376,16 @@ const createObject = () => {
     newObject.pivotOffset = { x: 0, y: 0, z: 0 }
   }
   
+  // Mark point light objects with centered pivot offset and light properties
+  if (selectedItem.value.type === 'pointlight') {
+    // Point light-specific pivot offset (centered)
+    newObject.pivotOffset = { x: 0, y: 0, z: 0 }
+    // Set default light properties with higher intensity for better visibility
+    newObject.lightColor = '#ffffff'
+    newObject.lightIntensity = 10 // Higher default for better range
+    newObject.lightDistance = 0 // 0 means infinite
+  }
+  
   sceneObjects.value.push(newObject)
   selectObject(newObject)
   emit('spawn', newObject)

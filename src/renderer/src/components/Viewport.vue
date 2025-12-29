@@ -8,18 +8,33 @@ import SpawnMenu from './SpawnMenu.vue'
 import { createBlockMesh } from '../utils/blockMeshCreator'
 import { createItemMesh } from '../utils/itemMeshCreator'
 import { createCameraMesh } from '../utils/cameraMeshCreator'
+import { createLightMesh, updateBillboardRotation } from '../utils/lightMeshCreator'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
-let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp, handleClick
+let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp, handleClick, handleF5KeyDown
 let raycaster, mouse, transformControls
 let backgroundPlane = null
+let ambientLight, directionalLight
+
+// Render mode state - false for unlit (default for main viewport), true for complex lighting
+const isComplexLighting = ref(false)
+
+// FPS tracking
+const fps = ref(0)
+let frameCount = 0
+let fpsUpdateTime = performance.now()
 
 // Inject scene state
 const sceneObjects = inject('sceneObjects')
 const selectedObject = inject('selectedObject')
 const selectObject = inject('selectObject')
 const projectSettings = inject('projectSettings')
+
+// Inject preview visibility controls
+const isPreviewVisible = inject('isPreviewVisible')
+const isPreviewPoppedOut = inject('isPreviewPoppedOut')
+const togglePreviewVisibility = inject('togglePreviewVisibility')
 
 // Provide viewport camera and controls for spawning cameras
 const viewportCamera = ref(null)
@@ -100,12 +115,15 @@ onMounted(() => {
     mouse = new THREE.Vector2()
 
     // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3)
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.3)
     scene.add(ambientLight)
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2)
+    directionalLight = new THREE.DirectionalLight(0xffffff, 1.2)
     directionalLight.position.set(5, 10, 7)
     scene.add(directionalLight)
+    
+    // Start with user-spawned lights disabled (unlit mode)
+    // Basic scene lights stay on but user lights are hidden
 
     // Add grid helper
     const gridHelper = new THREE.GridHelper(10, 10, 0xff0000, 0x333333)
@@ -494,6 +512,27 @@ onMounted(() => {
             }).catch(error => {
               console.error('Failed to create camera mesh:', error)
             })
+          } else if (obj.type === 'pointlight') {
+            // Handle point light type - async creation
+            createLightMesh(obj).then(mesh => {
+              if (mesh && !meshMap.has(obj.id)) {
+                // Add to scene or parent mesh
+                if (obj.parent) {
+                  const parentMesh = meshMap.get(obj.parent)
+                  if (parentMesh) {
+                    parentMesh.add(mesh)
+                  } else {
+                    scene.add(mesh)
+                  }
+                } else {
+                  scene.add(mesh)
+                }
+                
+                meshMap.set(obj.id, mesh)
+              }
+            }).catch(error => {
+              console.error('Failed to create light mesh:', error)
+            })
           } else if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
             
@@ -822,9 +861,72 @@ onMounted(() => {
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
 
+    // Toggle render mode function
+    const toggleRenderMode = () => {
+      isComplexLighting.value = !isComplexLighting.value
+      
+      if (isComplexLighting.value) {
+        // Enable complex lighting - enable user-spawned lights
+        // (Basic scene lights stay on always)
+        scene.traverse((object) => {
+          // Only toggle user-spawned lights, not the basic scene lights
+          if (object.isLight && object !== ambientLight && object !== directionalLight) {
+            object.visible = true
+          }
+        })
+      } else {
+        // Disable complex lighting (unlit mode) - disable only user-spawned lights
+        // Basic scene lights remain visible for basic shading
+        scene.traverse((object) => {
+          // Only toggle user-spawned lights, not the basic scene lights
+          if (object.isLight && object !== ambientLight && object !== directionalLight) {
+            object.visible = false
+          }
+        })
+      }
+      
+      console.log('Main Viewport render mode toggled:', isComplexLighting.value ? 'Complex Lighting' : 'Unlit (Performance Mode)')
+    }
+
+    // Add keyboard event listener for F5 key
+    handleF5KeyDown = (event) => {
+      if (event.key === 'F5') {
+        // Always prevent the browser's refresh behavior
+        event.preventDefault()
+        
+        // If preview is visible and inline (not popped out), dispatch event to preview
+        if (isPreviewVisible.value && !isPreviewPoppedOut.value) {
+          window.dispatchEvent(new CustomEvent('toggle-preview-render'))
+        } else {
+          // If preview is hidden or popped out, toggle main viewport
+          // (popped out preview has its own F5 handler)
+          toggleRenderMode()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleF5KeyDown)
+    
+    // Initialize visibility for any existing user lights (start in unlit mode)
+    scene.traverse((object) => {
+      if (object.isLight && object !== ambientLight && object !== directionalLight) {
+        object.visible = false
+      }
+    })
+
     // Animation loop
     const animate = () => {
       animationId = requestAnimationFrame(animate)
+      
+      // Calculate FPS
+      const currentTime = performance.now()
+      frameCount++
+      
+      // Update FPS every 500ms
+      if (currentTime - fpsUpdateTime >= 500) {
+        fps.value = Math.round((frameCount * 1000) / (currentTime - fpsUpdateTime))
+        frameCount = 0
+        fpsUpdateTime = currentTime
+      }
 
       // Update camera rotation based on mouse movement
       camera.rotation.order = 'YXZ'
@@ -921,6 +1023,20 @@ onMounted(() => {
               mesh.userData.pivotOffset = { ...effectivePivotOffset }
             }
             
+            // Update light properties if this is a light object
+            if (mesh.userData.isLight && mesh.userData.light) {
+              const light = mesh.userData.light
+              if (obj.lightColor !== undefined) {
+                light.color.set(obj.lightColor)
+              }
+              if (obj.lightIntensity !== undefined) {
+                light.intensity = obj.lightIntensity
+              }
+              if (obj.lightDistance !== undefined) {
+                light.distance = obj.lightDistance
+              }
+            }
+            
             // Pass down the pivot offset from parent (or this object if it has children)
             const pivotForChildren = obj.pivotOffset || effectivePivotOffset
             
@@ -938,6 +1054,13 @@ onMounted(() => {
       }
       
       updateMeshTransforms(sceneObjects.value)
+
+      // Update all light billboards to face camera
+      meshMap.forEach((mesh) => {
+        if (mesh.userData.isLight) {
+          updateBillboardRotation(mesh, camera)
+        }
+      })
 
       renderer.render(scene, camera)
     }
@@ -977,6 +1100,9 @@ onUnmounted(() => {
   }
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
+  if (handleF5KeyDown) {
+    window.removeEventListener('keydown', handleF5KeyDown)
+  }
 })
 </script>
 
@@ -1029,11 +1155,28 @@ onUnmounted(() => {
         <img :src="benchIcon" alt="Spawn" class="w-8 h-8" />
       </button>
 
+      <!-- Toggle Preview Visibility Button -->
+      <button
+        @click="togglePreviewVisibility"
+        class="absolute top-4 right-4 w-10 h-10 bg-[#2c2c2c] hover:bg-[#3c3c3c] border border-[#3c3c3c] rounded shadow-lg flex items-center justify-center transition-colors z-10"
+        :title="isPreviewVisible ? 'Hide Preview' : 'Show Preview'"
+      >
+        <i :class="isPreviewVisible ? 'bi bi-eye' : 'bi bi-eye-slash'" class="text-[#aaa] text-lg"></i>
+      </button>
+
       <!-- Spawn Menu Component -->
       <SpawnMenu
         :show="showSpawnMenu"
         @close="showSpawnMenu = false"
       />
+      
+      <!-- FPS Counter (only shown when complex lighting is enabled) -->
+      <div
+        v-if="isComplexLighting"
+        class="absolute top-20 left-4 bg-[#1a1a1a]/80 text-[#aaa] px-2 py-1 text-xs rounded border border-[#3c3c3c] pointer-events-none"
+      >
+        FPS: {{ fps }}
+      </div>
     </div>
   </div>
 </template>
