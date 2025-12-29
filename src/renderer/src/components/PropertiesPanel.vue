@@ -1,5 +1,5 @@
 <script setup>
-import { inject, computed, ref } from 'vue'
+import { inject, computed, ref, onMounted } from 'vue'
 import { useKeyframes } from '../composables/useKeyframes'
 
 // Inject from App.vue
@@ -15,6 +15,10 @@ const activeTab = ref('project')
 // Dropdown states
 const mainSettingsExpanded = ref(true)
 const backgroundSettingsExpanded = ref(true)
+
+// Block textures for floor selection
+const blockTextures = ref([])
+const blockTextureData = ref({})
 
 // Resolution preset
 const resolutionPreset = ref('HD720')
@@ -247,6 +251,30 @@ const handleBackgroundImageChange = (event) => {
     reader.readAsDataURL(file)
   }
 }
+
+// Load block textures for floor selection
+onMounted(async () => {
+  try {
+    const blockTexturesData = await window.api.getBlockTextures()
+    if (blockTexturesData && blockTexturesData.textures) {
+      blockTextures.value = blockTexturesData.textures
+      
+      // Load the actual texture data for each block texture
+      for (const texture of blockTextures.value) {
+        try {
+          const textureData = await window.api.loadTexture(texture.path)
+          if (textureData && textureData.data && !textureData.error) {
+            blockTextureData.value[texture.path] = 'data:image/png;base64,' + textureData.data
+          }
+        } catch (error) {
+          console.error('Failed to load block texture:', texture.name, error)
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load block textures:', error)
+  }
+})
 </script>
 
 <template>
@@ -483,6 +511,30 @@ const handleBackgroundImageChange = (event) => {
               </label>
               <div class="text-[#666] text-[10px] mt-0.5 ml-5">
                 When unchecked, image renders at original resolution
+              </div>
+            </div>
+            <div>
+              <label class="text-[#aaa] text-xs mb-1 block">Floor Texture</label>
+              <select
+                v-model="projectSettings.floorTexture"
+                class="w-full bg-[#1a1a1a] border border-[#3c3c3c] text-white px-2 py-1 text-xs rounded-sm focus:outline-none focus:border-[#3c5a99]"
+              >
+                <option :value="null">None (Gray)</option>
+                <option
+                  v-for="texture in blockTextures"
+                  :key="texture.path"
+                  :value="texture.path"
+                >
+                  {{ texture.name }}
+                </option>
+              </select>
+              <div v-if="projectSettings.floorTexture && blockTextureData[projectSettings.floorTexture]" class="mt-1">
+                <img
+                  :src="blockTextureData[projectSettings.floorTexture]"
+                  alt="Floor texture preview"
+                  class="w-8 h-8 border border-[#3c3c3c] rounded pixelated"
+                  style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+                />
               </div>
             </div>
           </div>

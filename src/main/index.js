@@ -8,6 +8,9 @@ import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from 'fs'
 // Track all preview windows
 const previewWindows = new Set()
 
+// Reference to loading window
+let loadingWindow = null
+
 // Enable hardware acceleration optimizations
 app.commandLine.appendSwitch('enable-gpu-rasterization')
 app.commandLine.appendSwitch('enable-zero-copy')
@@ -15,6 +18,34 @@ app.commandLine.appendSwitch('disable-software-rasterizer')
 app.commandLine.appendSwitch('enable-webgl')
 app.commandLine.appendSwitch('enable-webgl2-compute-context')
 app.commandLine.appendSwitch('ignore-gpu-blocklist')
+
+function createLoadingWindow() {
+  loadingWindow = new BrowserWindow({
+    width: 500,
+    height: 350,
+    frame: false,
+    transparent: false,
+    alwaysOnTop: true,
+    resizable: false,
+    backgroundColor: '#1e3c72',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  })
+
+  loadingWindow.center()
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    loadingWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/loading.html')
+  } else {
+    loadingWindow.loadFile(join(__dirname, '../renderer/loading.html'))
+  }
+
+  return loadingWindow
+}
 
 function createWindow() {
   // Create the browser window.
@@ -49,6 +80,11 @@ function createWindow() {
   mainWindow.center()
 
   mainWindow.on('ready-to-show', () => {
+    // Close loading window if it exists
+    if (loadingWindow && !loadingWindow.isDestroyed()) {
+      loadingWindow.close()
+      loadingWindow = null
+    }
     mainWindow.show()
   })
 
@@ -161,9 +197,13 @@ function findItemsFolder(startPath) {
 }
 
 // Function to generate items.json from models/item folder for a given assets folder
-function generateItemsJsonForFolder(dataDir, assetsFolder) {
+function generateItemsJsonForFolder(dataDir, assetsFolder, sendProgress = null) {
   try {
     console.log(`Generating items.json for ${assetsFolder}...`)
+    
+    if (sendProgress) {
+      sendProgress(`Generating items for ${assetsFolder}`, assetsFolder)
+    }
     
     // Category mappings based on item names
     const categoryMappings = {
@@ -287,9 +327,13 @@ function generateItemsJsonForFolder(dataDir, assetsFolder) {
 }
 
 // Function to generate blocks.json from blockstates for a given assets folder
-function generateBlocksJsonForFolder(dataDir, assetsFolder) {
+function generateBlocksJsonForFolder(dataDir, assetsFolder, sendProgress = null) {
   try {
     console.log(`Generating blocks.json for ${assetsFolder}...`)
+    
+    if (sendProgress) {
+      sendProgress(`Generating blocks for ${assetsFolder}`, assetsFolder)
+    }
     
     // Category mappings based on block names
     const categoryMappings = {
@@ -449,7 +493,7 @@ function generateBlocksJsonForFolder(dataDir, assetsFolder) {
 }
 
 // Function to scan data directory for folders containing "assets" and generate blocks.json and items.json for each
-function generateAllBlocksJson() {
+function generateAllBlocksJson(sendProgress = null) {
   try {
     const dataDir = join(app.getPath('userData'), 'data')
     
@@ -469,16 +513,34 @@ function generateAllBlocksJson() {
     
     console.log(`Found ${assetsFolders.length} folders containing "assets": ${assetsFolders.join(', ')}`)
     
+    if (sendProgress) {
+      sendProgress(`Found ${assetsFolders.length} asset folders`, 'Scanning...', 10)
+    }
+    
     // Generate blocks.json and items.json for each assets folder
     const generatedBlockFiles = []
     const generatedItemFiles = []
-    assetsFolders.forEach(folder => {
-      const blockResult = generateBlocksJsonForFolder(dataDir, folder)
+    assetsFolders.forEach((folder, index) => {
+      const progress = 10 + ((index / assetsFolders.length) * 80)
+      
+      if (sendProgress) {
+        sendProgress(`Processing ${folder}`, folder, progress)
+      }
+      
+      const blockResult = generateBlocksJsonForFolder(dataDir, folder, (status, currentFolder) => {
+        if (sendProgress) {
+          sendProgress(status, currentFolder, progress)
+        }
+      })
       if (blockResult) {
         generatedBlockFiles.push(blockResult)
       }
       
-      const itemResult = generateItemsJsonForFolder(dataDir, folder)
+      const itemResult = generateItemsJsonForFolder(dataDir, folder, (status, currentFolder) => {
+        if (sendProgress) {
+          sendProgress(status, currentFolder, progress + 5)
+        }
+      })
       if (itemResult) {
         generatedItemFiles.push(itemResult)
       }
@@ -539,8 +601,272 @@ function generateAllBlocksJson() {
   }
 }
 
+// Function to scan and cache block textures
+function scanBlockTextures(sendProgress = null) {
+  try {
+    const dataDir = join(app.getPath('userData'), 'data')
+    const blockTextures = []
+    
+    if (sendProgress) {
+      sendProgress('Scanning block textures...', 'textures/block', 90)
+    }
+    
+    // Read all items in data directory
+    const items = readdirSync(dataDir)
+    
+    // Filter for directories that contain "assets" in their name
+    const assetsFolders = items.filter(item => {
+      const itemPath = join(dataDir, item)
+      return statSync(itemPath).isDirectory() && item.toLowerCase().includes('assets')
+    })
+    
+    console.log(`Scanning ${assetsFolders.length} asset folders for block textures...`)
+    
+    // Scan each assets folder for block textures
+    for (const assetsFolder of assetsFolders) {
+      const assetsFolderPath = join(dataDir, assetsFolder)
+      
+      if (sendProgress) {
+        sendProgress(`Scanning textures in ${assetsFolder}`, assetsFolder, 92)
+      }
+      
+      try {
+        // Look for textures/block folders recursively
+        const findTexturesFolders = (startPath) => {
+          const toSearch = [startPath]
+          const texturesFolders = []
+          
+          while (toSearch.length > 0) {
+            const currentPath = toSearch.shift()
+            
+            try {
+              const dirItems = readdirSync(currentPath)
+              
+              for (const dirItem of dirItems) {
+                const dirItemPath = join(currentPath, dirItem)
+                
+                try {
+                  const stats = statSync(dirItemPath)
+                  
+                  if (stats.isDirectory()) {
+                    // Check if this is a block texture directory
+                    if (dirItem.toLowerCase() === 'block' && currentPath.endsWith('textures')) {
+                      texturesFolders.push(dirItemPath)
+                    } else {
+                      // Add to search queue
+                      toSearch.push(dirItemPath)
+                    }
+                  }
+                } catch {
+                  continue
+                }
+              }
+            } catch {
+              continue
+            }
+          }
+          
+          return texturesFolders
+        }
+        
+        const blockTextureFolders = findTexturesFolders(assetsFolderPath)
+        
+        // Scan each block texture folder for PNG files
+        for (const blockTextureFolder of blockTextureFolders) {
+          try {
+            const textureFiles = readdirSync(blockTextureFolder).filter(file =>
+              file.endsWith('.png') && statSync(join(blockTextureFolder, file)).isFile()
+            )
+            
+            // Determine the namespace from the path
+            const relativePath = blockTextureFolder.replace(assetsFolderPath, '').replace(/\\/g, '/')
+            const pathParts = relativePath.split('/').filter(p => p)
+            
+            // Expected structure: assets/namespace/textures/block
+            let namespace = 'minecraft'
+            for (let i = 0; i < pathParts.length; i++) {
+              if (pathParts[i] === 'assets' && i + 1 < pathParts.length) {
+                namespace = pathParts[i + 1]
+                break
+              }
+            }
+            
+            for (const textureFile of textureFiles) {
+              const textureName = textureFile.replace('.png', '')
+              
+              // Convert texture name to readable name
+              const displayName = textureName
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ')
+              
+              blockTextures.push({
+                name: displayName,
+                path: `${namespace}:block/${textureName}`,
+                category: namespace === 'minecraft' ? 'Minecraft' : namespace.charAt(0).toUpperCase() + namespace.slice(1)
+              })
+            }
+          } catch (error) {
+            console.error(`Error reading textures from ${blockTextureFolder}:`, error)
+          }
+        }
+      } catch (error) {
+        console.error(`Error scanning ${assetsFolder} for block textures:`, error)
+      }
+    }
+    
+    // Sort textures alphabetically
+    blockTextures.sort((a, b) => a.name.localeCompare(b.name))
+    
+    console.log(`Found ${blockTextures.length} block textures`)
+    
+    // Cache the results to a JSON file for faster subsequent loads
+    const cacheFile = join(dataDir, 'block-textures-cache.json')
+    writeFileSync(cacheFile, JSON.stringify({ textures: blockTextures }, null, 2))
+    
+    if (sendProgress) {
+      sendProgress('Block textures scanned', `${blockTextures.length} textures found`, 95)
+    }
+    
+    return blockTextures
+  } catch (error) {
+    console.error('Error scanning block textures:', error)
+    return []
+  }
+}
+
+// Function to scan and cache item textures
+async function scanItemTextures(sendProgress = null) {
+  try {
+    const dataDir = join(app.getPath('userData'), 'data')
+    const itemsJsonPath = join(dataDir, 'items.json')
+    const itemTextures = {}
+    
+    if (!existsSync(itemsJsonPath)) {
+      console.log('No items.json found, skipping item texture scan')
+      return {}
+    }
+    
+    if (sendProgress) {
+      sendProgress('Scanning item textures...', 'items/', 95)
+    }
+    
+    const fs = await import('fs/promises')
+    const itemsData = await fs.readFile(itemsJsonPath, 'utf-8')
+    const items = JSON.parse(itemsData).items || []
+    
+    console.log(`Scanning textures for ${items.length} items...`)
+    
+    // Process items in parallel for faster loading
+    const promises = items.map(async (item, index) => {
+      try {
+        // Load the item model to get the texture
+        const fullPath = join(dataDir, item.path)
+        
+        if (existsSync(fullPath)) {
+          const itemModelData = await fs.readFile(fullPath, 'utf-8')
+          const itemModel = JSON.parse(itemModelData)
+          
+          if (itemModel && itemModel.textures && itemModel.textures.layer0) {
+            const textureRef = itemModel.textures.layer0
+            
+            // Load texture using the existing load texture logic
+            const textureData = await loadTextureData(textureRef, dataDir)
+            if (textureData && textureData.data) {
+              itemTextures[item.path] = 'data:image/png;base64,' + textureData.data
+            }
+          }
+        }
+        
+        // Update progress occasionally
+        if (index % 100 === 0 && sendProgress) {
+          const progress = 95 + ((index / items.length) * 3) // 95-98%
+          sendProgress(`Loading item textures... (${index}/${items.length})`, `${Math.floor((index / items.length) * 100)}% complete`, progress)
+        }
+      } catch (error) {
+        // Silently skip items that fail to load
+        console.log(`Skipping texture for ${item.path}:`, error.message)
+      }
+    })
+    
+    await Promise.all(promises)
+    
+    console.log(`Loaded ${Object.keys(itemTextures).length} item textures`)
+    
+    // Cache the results
+    const cacheFile = join(dataDir, 'item-textures-cache.json')
+    await fs.writeFile(cacheFile, JSON.stringify(itemTextures, null, 2))
+    
+    if (sendProgress) {
+      sendProgress('Item textures scanned', `${Object.keys(itemTextures).length} textures loaded`, 98)
+    }
+    
+    return itemTextures
+  } catch (error) {
+    console.error('Error scanning item textures:', error)
+    return {}
+  }
+}
+
+// Helper function to load texture data
+async function loadTextureData(texturePath, dataDir) {
+  try {
+    // Handle paths with namespace (namespace:path/to/texture)
+    if (texturePath.includes(':')) {
+      const parts = texturePath.split(':')
+      
+      let namespace, path
+      if (parts.length > 2) {
+        namespace = parts[parts.length - 2]
+        path = parts[parts.length - 1]
+      } else {
+        namespace = parts[0]
+        path = parts[1]
+      }
+      
+      // Look for folders containing "assets" in their name
+      const items = readdirSync(dataDir)
+      
+      for (const item of items) {
+        const itemPath = join(dataDir, item)
+        try {
+          if (statSync(itemPath).isDirectory() && item.toLowerCase().includes('assets')) {
+            // Check if this assets folder has the namespace directory
+            const namespacePath = join(itemPath, 'assets', namespace, 'textures', path + '.png')
+            if (existsSync(namespacePath)) {
+              const fs = await import('fs/promises')
+              const data = await fs.readFile(namespacePath)
+              return {
+                data: data.toString('base64'),
+                path: namespacePath
+              }
+            }
+          }
+        } catch (err) {
+          continue
+        }
+      }
+    }
+    
+    // Try fallback
+    const fallbackPath = join(dataDir, 'SimplyRemadeAssetsV1/assets/minecraft/textures/block/1.png')
+    if (existsSync(fallbackPath)) {
+      const fs = await import('fs/promises')
+      const data = await fs.readFile(fallbackPath)
+      return {
+        data: data.toString('base64'),
+        path: fallbackPath
+      }
+    }
+    
+    return null
+  } catch (error) {
+    return null
+  }
+}
+
 // Function to extract assets on startup
-function extractAssets() {
+async function extractAssets(sendProgress = null) {
   try {
     // Use userData directory for cross-platform compatibility
     const dataDir = join(app.getPath('userData'), 'data')
@@ -555,6 +881,10 @@ function extractAssets() {
       console.log('Zip path:', zipPath)
       console.log('Data directory:', dataDir)
       
+      if (sendProgress) {
+        sendProgress('Extracting assets...', 'SimplyRemadeAssetsV1.zip', 5)
+      }
+      
       // Create data directory
       mkdirSync(dataDir, { recursive: true })
       
@@ -563,26 +893,71 @@ function extractAssets() {
       zip.extractAllTo(dataDir, true)
       
       console.log('Assets extracted successfully to:', dataDir)
+      
+      if (sendProgress) {
+        sendProgress('Assets extracted', dataDir, 10)
+      }
     } else {
       console.log('Data directory already exists, skipping extraction.')
+      
+      if (sendProgress) {
+        sendProgress('Assets already exist', dataDir, 10)
+      }
     }
     
     // Generate blocks.json for all asset folders
-    generateAllBlocksJson()
+    generateAllBlocksJson(sendProgress)
+    
+    // Scan block textures
+    scanBlockTextures(sendProgress)
+    
+    // Scan item textures
+    await scanItemTextures(sendProgress)
+    
+    if (sendProgress) {
+      sendProgress('Complete!', 'All resources loaded', 100)
+    }
   } catch (error) {
     console.error('Error extracting assets:', error)
+    if (sendProgress) {
+      sendProgress('Error loading assets', error.message, 100)
+    }
   }
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
-  // Extract assets before creating window
-  extractAssets()
+  // Create loading window first
+  createLoadingWindow()
+
+  // Wait for loading window to be ready before starting asset extraction
+  loadingWindow.webContents.once('did-finish-load', async () => {
+    // Extract assets with progress reporting
+    await extractAssets((status, folder, progress) => {
+      if (loadingWindow && !loadingWindow.isDestroyed()) {
+        loadingWindow.webContents.send('loading-progress', {
+          status,
+          folder,
+          progress
+        })
+      }
+    })
+
+    // Send completion signal
+    if (loadingWindow && !loadingWindow.isDestroyed()) {
+      loadingWindow.webContents.send('loading-complete')
+    }
+
+    // Wait a moment to show completion, then create main window
+    setTimeout(() => {
+      createWindow()
+    }, 500)
+  })
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -631,6 +1006,52 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Error reading items data:', error)
       return { items: [], error: error.message }
+    }
+  })
+
+  // Handler to get cached item textures
+  ipcMain.handle('get-item-textures', async () => {
+    try {
+      const dataDir = join(app.getPath('userData'), 'data')
+      const cacheFile = join(dataDir, 'item-textures-cache.json')
+      
+      // Try to read from cache
+      if (existsSync(cacheFile)) {
+        console.log('Loading item textures from cache...')
+        const fs = await import('fs/promises')
+        const data = await fs.readFile(cacheFile, 'utf-8')
+        return JSON.parse(data)
+      } else {
+        console.log('Item textures cache not found')
+        return {}
+      }
+    } catch (error) {
+      console.error('Error getting item textures:', error)
+      return {}
+    }
+  })
+
+  // Handler to get block textures - uses cached data from initial scan
+  ipcMain.handle('get-block-textures', async () => {
+    try {
+      const dataDir = join(app.getPath('userData'), 'data')
+      const cacheFile = join(dataDir, 'block-textures-cache.json')
+      
+      // Try to read from cache first
+      if (existsSync(cacheFile)) {
+        console.log('Loading block textures from cache...')
+        const fs = await import('fs/promises')
+        const data = await fs.readFile(cacheFile, 'utf-8')
+        return JSON.parse(data)
+      } else {
+        // If cache doesn't exist, scan now and cache
+        console.log('Cache not found, scanning block textures now...')
+        const textures = scanBlockTextures()
+        return { textures }
+      }
+    } catch (error) {
+      console.error('Error getting block textures:', error)
+      return { textures: [], error: error.message }
     }
   })
 
@@ -838,7 +1259,7 @@ app.whenReady().then(() => {
     }
   })
 
-  createWindow()
+  // Don't create window here anymore - it's created after asset loading completes
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

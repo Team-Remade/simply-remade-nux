@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Loading Resources...</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+          Cantarell, 'Helvetica Neue', sans-serif;
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #1e3c72 100%);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .loading-container {
+        text-align: center;
+        padding: 40px;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 16px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        min-width: 400px;
+        max-width: 500px;
+      }
+
+      .logo {
+        font-size: 48px;
+        margin-bottom: 20px;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.8;
+          transform: scale(1.05);
+        }
+      }
+
+      h1 {
+        font-size: 28px;
+        margin-bottom: 10px;
+        font-weight: 600;
+      }
+
+      .status {
+        font-size: 14px;
+        color: #a8c9ff;
+        margin-bottom: 20px;
+        min-height: 20px;
+      }
+
+      .progress-container {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 15px;
+      }
+
+      .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+        width: 0%;
+        box-shadow: 0 0 10px rgba(79, 172, 254, 0.5);
+      }
+
+      .progress-text {
+        font-size: 13px;
+        color: #88b3ff;
+        margin-top: 8px;
+      }
+
+      .current-folder {
+        font-size: 12px;
+        color: #6b9bff;
+        margin-top: 15px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        word-break: break-all;
+        max-height: 60px;
+        overflow: hidden;
+      }
+
+      .spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+        margin-left: 10px;
+        vertical-align: middle;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="loading-container">
+      <div class="logo">📦</div>
+      <h1>Loading Resources</h1>
+      <div class="status">
+        <span id="statusText">Initializing...</span>
+        <div class="spinner"></div>
+      </div>
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="progress-text" id="progressText">0%</div>
+      <div class="current-folder" id="currentFolder">Preparing...</div>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require('electron')
+
+      const progressBar = document.getElementById('progressBar')
+      const progressText = document.getElementById('progressText')
+      const statusText = document.getElementById('statusText')
+      const currentFolder = document.getElementById('currentFolder')
+
+      // Listen for progress updates
+      ipcRenderer.on('loading-progress', (event, data) => {
+        const { progress, status, folder } = data
+
+        // Update progress bar
+        progressBar.style.width = `${progress}%`
+        progressText.textContent = `${Math.round(progress)}%`
+
+        // Update status text
+        if (status) {
+          statusText.textContent = status
+        }
+
+        // Update current folder
+        if (folder) {
+          currentFolder.textContent = `Scanning: ${folder}`
+        }
+      })
+
+      // Listen for completion
+      ipcRenderer.on('loading-complete', () => {
+        statusText.textContent = 'Complete!'
+        progressBar.style.width = '100%'
+        progressText.textContent = '100%'
+        currentFolder.textContent = 'Resources loaded successfully'
+      })
+    </script>
+  </body>
+</html>

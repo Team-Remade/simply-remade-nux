@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, inject, onMounted, watch } from 'vue'
+import { ref, computed, inject, onMounted } from 'vue'
 
 defineProps({
   show: {
@@ -25,6 +25,8 @@ const itemTextureSource = ref('item') // 'item' or 'block'
 const blocks = ref([])
 const items = ref([])
 const itemTextures = ref({}) // Store loaded textures for items
+const blockTextures = ref([]) // Store block textures when in block mode
+const blockTextureItems = ref([]) // Store block textures as items for display
 
 // Load blocks and items from the API
 onMounted(async () => {
@@ -54,9 +56,37 @@ onMounted(async () => {
         id: item.path // Use path as unique identifier
       }))
       
-      // Load textures for items
-      for (const item of items.value) {
-        loadItemTexture(item)
+      // Load cached item textures from initialization
+      const cachedItemTextures = await window.api.getItemTextures()
+      if (cachedItemTextures) {
+        itemTextures.value = cachedItemTextures
+        console.log(`Loaded ${Object.keys(cachedItemTextures).length} cached item textures`)
+      }
+    }
+    
+    // Load block textures
+    const blockTexturesData = await window.api.getBlockTextures()
+    if (blockTexturesData && blockTexturesData.textures) {
+      // Convert block textures to item-like format for display
+      blockTextureItems.value = blockTexturesData.textures.map(texture => ({
+        name: texture.name,
+        type: 'item', // Use 'item' type for display purposes
+        itemPath: texture.path,
+        category: texture.category || 'Block Textures',
+        id: texture.path,
+        isBlockTexture: true // Flag to indicate this is a block texture
+      }))
+      
+      // Load the actual texture data for each block texture
+      for (const texture of blockTextureItems.value) {
+        try {
+          const textureData = await window.api.loadTexture(texture.itemPath)
+          if (textureData && textureData.data && !textureData.error) {
+            blockTextures.value[texture.id] = 'data:image/png;base64,' + textureData.data
+          }
+        } catch (error) {
+          console.error('Failed to load block texture:', texture.name, error)
+        }
       }
     }
   } catch (error) {
@@ -64,55 +94,8 @@ onMounted(async () => {
   }
 })
 
-// Function to load item texture
-const loadItemTexture = async (item, textureSource = 'item') => {
-  try {
-    // Load the item model to get the texture
-    const itemModel = await window.api.loadBlockModel(item.itemPath)
-    if (itemModel && itemModel.textures) {
-      // Get layer0 texture (main texture for items)
-      let textureRef = itemModel.textures.layer0
-      if (textureRef) {
-        // Replace /item/ with /block/ if using block textures
-        if (textureSource === 'block') {
-          textureRef = textureRef.replace(/\/item\//, '/block/')
-          // Skip if the texture path still contains 'item' after replacement
-          if (textureRef.includes('item')) {
-            delete itemTextures.value[item.id]
-            return
-          }
-        }
-        
-        const textureData = await window.api.loadTexture(textureRef)
-        // Only add texture if successfully loaded and not using fallback
-        if (textureData && textureData.data && !textureData.error) {
-          itemTextures.value[item.id] = 'data:image/png;base64,' + textureData.data
-        } else {
-          // If texture failed to load, ensure it's not in the map
-          delete itemTextures.value[item.id]
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Failed to load texture for item:', item.name, error)
-    // Remove texture if it fails to load
-    delete itemTextures.value[item.id]
-  }
-}
-
-// Watch for texture source changes and reload item textures
-watch(itemTextureSource, async (newSource) => {
-  // Create a completely new empty object to force reactivity
-  itemTextures.value = {}
-  
-  // Small delay to ensure reactivity updates
-  await new Promise(resolve => setTimeout(resolve, 10))
-  
-  // Reload all item textures with new source
-  for (const item of items.value) {
-    await loadItemTexture(item, newSource)
-  }
-})
+// Note: Item textures are now pre-loaded during app initialization and retrieved from cache
+// This eliminates the need for individual texture loading per item
 
 // Object categories and items
 const spawnCategories = computed(() => {
@@ -151,7 +134,10 @@ const spawnCategories = computed(() => {
   // Group items by subcategory
   const itemsByCategory = {}
   
-  items.value.forEach(item => {
+  // Use block texture items when in block mode, otherwise use items
+  const itemsToDisplay = itemTextureSource.value === 'block' ? blockTextureItems.value : items.value
+  
+  itemsToDisplay.forEach(item => {
     const category = item.category || 'Other'
     if (!itemsByCategory[category]) {
       itemsByCategory[category] = []
@@ -214,7 +200,9 @@ const currentCategoryItems = computed(() => {
     
     // For items, only show if texture is loaded
     if (item.type === 'item') {
-      return !!itemTextures.value[item.id]
+      // Check the appropriate texture map based on current source
+      const textureMap = itemTextureSource.value === 'block' ? blockTextures.value : itemTextures.value
+      return !!textureMap[item.id]
     }
     // For other types, always show
     return true
@@ -463,7 +451,7 @@ const closeMenu = () => {
           </div>
           <!-- Item Button with Texture (for items) - only show if texture loaded -->
           <button
-            v-else-if="item.type === 'item' && itemTextures[item.id]"
+            v-else-if="item.type === 'item' && (itemTextureSource === 'block' ? blockTextures[item.id] : itemTextures[item.id])"
             @click="selectItem(item)"
             :class="[
               'w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded mb-0.5 transition-colors',
@@ -473,7 +461,7 @@ const closeMenu = () => {
             ]"
           >
             <img
-              :src="itemTextures[item.id]"
+              :src="itemTextureSource === 'block' ? blockTextures[item.id] : itemTextures[item.id]"
               :alt="item.name"
               class="w-4 h-4 pixelated"
               style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"

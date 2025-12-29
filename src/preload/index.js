@@ -5,6 +5,8 @@ import { electronAPI } from '@electron-toolkit/preload'
 const api = {
   getBlocks: () => ipcRenderer.invoke('get-blocks'),
   getItems: () => ipcRenderer.invoke('get-items'),
+  getItemTextures: () => ipcRenderer.invoke('get-item-textures'),
+  getBlockTextures: () => ipcRenderer.invoke('get-block-textures'),
   getDataDir: () => ipcRenderer.invoke('get-data-dir'),
   loadBlockModel: (blockPath) => ipcRenderer.invoke('load-block-model', blockPath),
   loadTexture: (texturePath) => ipcRenderer.invoke('load-texture', texturePath),

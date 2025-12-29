@@ -12,10 +12,11 @@ import { createLightMesh, updateBillboardRotation } from '../utils/lightMeshCrea
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
-let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp, handleClick, handleF5KeyDown
+let handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu, handleKeyDown, handleKeyUp, handleClick, handleF5KeyDown, handleWheel
 let raycaster, mouse, transformControls
 let backgroundPlane = null
 let ambientLight, directionalLight
+let floorMesh = null // Reference to the floor mesh
 
 // Render mode state - false for unlit (default for main viewport), true for complex lighting
 const isComplexLighting = ref(false)
@@ -72,9 +73,12 @@ const controls = {
   moveRight: false,
   moveUp: false,
   moveDown: false,
+  shiftPressed: false, // Track shift for slow movement
+  spacePressed: false, // Track space for fast movement
   yaw: 0, // Rotation around Y axis
   pitch: 0, // Rotation around X axis
-  moveSpeed: 0.1,
+  baseMoveSpeed: 0.1, // Base speed that can be changed with scroll
+  moveSpeed: 0.1, // Actual speed used for movement
   lookSpeed: 0.002,
   isTransformDragging: false,
   wasTransformDragging: false // Track if we were dragging to prevent click selection
@@ -128,6 +132,92 @@ onMounted(() => {
     // Add grid helper
     const gridHelper = new THREE.GridHelper(10, 10, 0xff0000, 0x333333)
     scene.add(gridHelper)
+
+    // Add floor mesh - 64x64 plane with tiled UVs (1 meter = 1 full image)
+    const floorGeometry = new THREE.PlaneGeometry(64, 64)
+    // Tile the UVs 64 times to create a 64x64 grid
+    const uvs = floorGeometry.attributes.uv.array
+    for (let i = 0; i < uvs.length; i += 2) {
+      uvs[i] *= 64     // u coordinate
+      uvs[i + 1] *= 64 // v coordinate
+    }
+    floorGeometry.attributes.uv.needsUpdate = true
+    
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x91bd59, // Green tint for grass
+      side: THREE.DoubleSide
+    })
+    floorMesh = new THREE.Mesh(floorGeometry, floorMaterial)
+    floorMesh.rotation.x = -Math.PI / 2 // Rotate to be horizontal
+    floorMesh.position.y = 0 // Place at y=0
+    scene.add(floorMesh)
+
+    // Helper function to load floor texture
+    const loadFloorTexture = async (texturePath) => {
+      console.log('[Floor] loadFloorTexture called with:', texturePath)
+      if (!floorMesh) {
+        console.log('[Floor] floorMesh not available yet')
+        return
+      }
+      
+      // Dispose of old texture if it exists
+      if (floorMesh.material.map) {
+        floorMesh.material.map.dispose()
+      }
+      
+      if (texturePath) {
+        // Determine if this is a grass texture (should have green tint)
+        const isGrassTexture = texturePath && texturePath.includes('grass')
+        const tintColor = isGrassTexture ? 0x91bd59 : 0xffffff
+        
+        try {
+          console.log('[Floor] Loading texture from path:', texturePath)
+          const textureData = await window.api.loadTexture(texturePath)
+          console.log('[Floor] Texture data loaded:', textureData ? 'Success' : 'Failed', textureData?.error)
+          if (textureData && textureData.data && !textureData.error) {
+            const dataUrl = 'data:image/png;base64,' + textureData.data
+            const textureLoader = new THREE.TextureLoader()
+            textureLoader.load(dataUrl, (texture) => {
+              console.log('[Floor] Texture loaded successfully')
+              texture.wrapS = THREE.RepeatWrapping
+              texture.wrapT = THREE.RepeatWrapping
+              texture.magFilter = THREE.NearestFilter
+              texture.minFilter = THREE.NearestFilter
+              
+              floorMesh.material.map = texture
+              floorMesh.material.color.setHex(tintColor) // Green tint for grass, white for others
+              floorMesh.material.needsUpdate = true
+            }, undefined, (error) => {
+              console.error('[Floor] Texture loader error:', error)
+            })
+          } else {
+            console.log('[Floor] No valid texture data')
+          }
+        } catch (error) {
+          console.error('[Floor] Failed to load floor texture:', error)
+        }
+      } else {
+        // No texture - reset to gray
+        console.log('[Floor] No texture path, using gray')
+        floorMesh.material.map = null
+        floorMesh.material.color.setHex(0x808080)
+        floorMesh.material.needsUpdate = true
+      }
+    }
+
+    // Load default floor texture - use setTimeout to ensure everything is initialized
+    setTimeout(() => {
+      console.log('[Floor] Attempting to load initial texture, path =', projectSettings.value.floorTexture)
+      if (projectSettings.value.floorTexture) {
+        loadFloorTexture(projectSettings.value.floorTexture)
+      }
+    }, 100)
+
+    // Watch for floor texture changes
+    watch(() => projectSettings.value.floorTexture, (newTexturePath) => {
+      console.log('[Floor] Texture path changed to:', newTexturePath)
+      loadFloorTexture(newTexturePath)
+    })
 
     // Add axes helper
     //const axesHelper = new THREE.AxesHelper(5)
@@ -775,6 +865,18 @@ onMounted(() => {
       
       const key = event.key.toLowerCase()
       
+      // Track shift and space for speed modifiers
+      if (event.key === 'Shift') {
+        controls.shiftPressed = true
+      }
+      if (event.key === ' ') {
+        controls.spacePressed = true
+        // Prevent page scrolling when space is pressed during flying
+        if (controls.isRightMouseDown) {
+          event.preventDefault()
+        }
+      }
+      
       // Camera movement keys - when right mouse button is held, these take priority
       if (controls.isRightMouseDown) {
         switch (key) {
@@ -830,6 +932,14 @@ onMounted(() => {
     }
 
     handleKeyUp = (event) => {
+      // Track shift and space release
+      if (event.key === 'Shift') {
+        controls.shiftPressed = false
+      }
+      if (event.key === ' ') {
+        controls.spacePressed = false
+      }
+      
       switch (event.key.toLowerCase()) {
         case 'w':
           controls.moveForward = false
@@ -852,12 +962,28 @@ onMounted(() => {
       }
     }
 
+    // Wheel event handler for changing base speed
+    handleWheel = (event) => {
+      // Only change speed when right mouse is held (flying)
+      if (controls.isRightMouseDown) {
+        event.preventDefault()
+        
+        // Adjust base speed with scroll
+        // Positive deltaY = scroll down = slower, negative = scroll up = faster
+        const speedChange = event.deltaY > 0 ? -0.01 : 0.01
+        controls.baseMoveSpeed = Math.max(0.01, Math.min(5.0, controls.baseMoveSpeed + speedChange))
+        
+        console.log('Base speed:', controls.baseMoveSpeed.toFixed(3))
+      }
+    }
+
     // Add event listeners
     canvasContainer.value.addEventListener('mousedown', handleMouseDown)
     canvasContainer.value.addEventListener('mousemove', handleMouseMove)
     canvasContainer.value.addEventListener('mouseup', handleMouseUp)
     canvasContainer.value.addEventListener('click', handleClick)
     canvasContainer.value.addEventListener('contextmenu', handleContextMenu)
+    canvasContainer.value.addEventListener('wheel', handleWheel, { passive: false })
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
 
@@ -932,6 +1058,16 @@ onMounted(() => {
       camera.rotation.order = 'YXZ'
       camera.rotation.y = controls.yaw
       camera.rotation.x = controls.pitch
+
+      // Calculate actual movement speed based on modifiers
+      let speedMultiplier = 1.0
+      if (controls.shiftPressed) {
+        speedMultiplier = 0.25 // Slow down to 25% speed
+      }
+      if (controls.spacePressed) {
+        speedMultiplier = 3.0 // Speed up to 300% speed
+      }
+      controls.moveSpeed = controls.baseMoveSpeed * speedMultiplier
 
       // Calculate movement direction based on camera rotation
       const forward = new THREE.Vector3()
@@ -1097,6 +1233,7 @@ onUnmounted(() => {
     canvasContainer.value.removeEventListener('mouseup', handleMouseUp)
     canvasContainer.value.removeEventListener('click', handleClick)
     canvasContainer.value.removeEventListener('contextmenu', handleContextMenu)
+    canvasContainer.value.removeEventListener('wheel', handleWheel)
   }
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)

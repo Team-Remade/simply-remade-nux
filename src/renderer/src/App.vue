@@ -37,7 +37,8 @@ const resizeStartSize = ref({ width: 0, height: 0 })
 const projectSettings = ref({
   backgroundColor: '#9393FF',
   backgroundImage: null,
-  backgroundStretchToFit: true
+  backgroundStretchToFit: true,
+  floorTexture: 'block/grass_block_top' // Default to grass block top texture
 })
 
 // Provide scene state to child components

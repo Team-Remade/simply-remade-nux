@@ -9,6 +9,7 @@ const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize, resizeObserver, handleTogglePreviewRender, handleKeyDown
 let backgroundPlane = null
 let ambientLight, directionalLight
+let floorMesh = null // Reference to the floor mesh
 
 // Render mode state - true for complex lighting, false for unlit
 const isComplexLighting = ref(false)
@@ -142,6 +143,78 @@ onMounted(() => {
     // Add grid helper
     const gridHelper = new THREE.GridHelper(10, 10, 0xff0000, 0x333333)
     scene.add(gridHelper)
+
+    // Add floor mesh - 64x64 plane with tiled UVs (1 meter = 1 full image)
+    const floorGeometry = new THREE.PlaneGeometry(64, 64)
+    // Tile the UVs 64 times to create a 64x64 grid
+    const uvs = floorGeometry.attributes.uv.array
+    for (let i = 0; i < uvs.length; i += 2) {
+      uvs[i] *= 64     // u coordinate
+      uvs[i + 1] *= 64 // v coordinate
+    }
+    floorGeometry.attributes.uv.needsUpdate = true
+    
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x91bd59, // Green tint for grass
+      side: THREE.DoubleSide
+    })
+    floorMesh = new THREE.Mesh(floorGeometry, floorMaterial)
+    floorMesh.rotation.x = -Math.PI / 2 // Rotate to be horizontal
+    floorMesh.position.y = 0 // Place at y=0
+    scene.add(floorMesh)
+
+    // Helper function to load floor texture
+    const loadFloorTexture = async (texturePath) => {
+      if (!floorMesh) return
+      
+      // Dispose of old texture if it exists
+      if (floorMesh.material.map) {
+        floorMesh.material.map.dispose()
+      }
+      
+      if (texturePath) {
+        // Determine if this is a grass texture (should have green tint)
+        const isGrassTexture = texturePath && texturePath.includes('grass')
+        const tintColor = isGrassTexture ? 0x91bd59 : 0xffffff
+        
+        try {
+          const textureData = await window.api.loadTexture(texturePath)
+          if (textureData && textureData.data && !textureData.error) {
+            const dataUrl = 'data:image/png;base64,' + textureData.data
+            const textureLoader = new THREE.TextureLoader()
+            textureLoader.load(dataUrl, (texture) => {
+              texture.wrapS = THREE.RepeatWrapping
+              texture.wrapT = THREE.RepeatWrapping
+              texture.magFilter = THREE.NearestFilter
+              texture.minFilter = THREE.NearestFilter
+              
+              floorMesh.material.map = texture
+              floorMesh.material.color.setHex(tintColor) // Green tint for grass, white for others
+              floorMesh.material.needsUpdate = true
+            })
+          }
+        } catch (error) {
+          console.error('[PreviewFloor] Failed to load floor texture:', error)
+        }
+      } else {
+        // No texture - reset to gray
+        floorMesh.material.map = null
+        floorMesh.material.color.setHex(0x808080)
+        floorMesh.material.needsUpdate = true
+      }
+    }
+
+    // Load default floor texture - use setTimeout to ensure everything is initialized
+    setTimeout(() => {
+      if (projectSettings.value.floorTexture) {
+        loadFloorTexture(projectSettings.value.floorTexture)
+      }
+    }, 100)
+
+    // Watch for floor texture changes
+    watch(() => projectSettings.value.floorTexture, (newTexturePath) => {
+      loadFloorTexture(newTexturePath)
+    })
 
     // Watch for background color changes
     watch(() => projectSettings.value.backgroundColor, (newColor) => {
@@ -432,7 +505,6 @@ onMounted(() => {
         frameCount = 0
         fpsUpdateTime = currentTime
       }
-      lastFrameTime = currentTime
 
       // Update camera from selected scene camera object
       if (selectedCamera.value) {
