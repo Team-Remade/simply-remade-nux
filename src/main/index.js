@@ -1055,6 +1055,92 @@ app.whenReady().then(async () => {
     }
   })
 
+  // Handler to get characters (scan for GLB files in data directory)
+  ipcMain.handle('get-characters', async () => {
+    try {
+      // Check data folder for GLB files (recursively scan all asset folders)
+      const dataDir = join(app.getPath('userData'), 'data')
+      
+      console.log('Scanning for characters in:', dataDir)
+      
+      if (!existsSync(dataDir)) {
+        console.log('Data directory does not exist')
+        return { characters: [] }
+      }
+      
+      const characters = []
+      
+      // Recursive function to scan directories for GLB files
+      const scanDirectory = (dir, relativePath = '') => {
+        try {
+          const items = readdirSync(dir)
+          
+          for (const item of items) {
+            const fullPath = join(dir, item)
+            const stats = statSync(fullPath)
+            
+            if (stats.isDirectory()) {
+              // Recursively scan subdirectories
+              const newRelativePath = relativePath ? `${relativePath}/${item}` : item
+              scanDirectory(fullPath, newRelativePath)
+            } else if (stats.isFile() && item.toLowerCase().endsWith('.glb')) {
+              // Found a GLB file
+              // Convert filename to readable name
+              const name = item.replace('.glb', '')
+                .split(/[-_]/)
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ')
+              
+              const pathInData = relativePath ? `${relativePath}/${item}` : item
+              
+              characters.push({
+                name: name,
+                path: pathInData, // Path relative to data directory
+                fileName: item,
+                fullPath: fullPath
+              })
+            }
+          }
+        } catch (error) {
+          console.error(`Error scanning directory ${dir}:`, error)
+        }
+      }
+      
+      scanDirectory(dataDir)
+      
+      console.log(`Found ${characters.length} character files`)
+      
+      return { characters }
+    } catch (error) {
+      console.error('Error scanning for characters:', error)
+      return { characters: [], error: error.message }
+    }
+  })
+
+  // Handler to load a GLB character file
+  ipcMain.handle('load-character-glb', async (event, characterPath) => {
+    try {
+      const dataDir = join(app.getPath('userData'), 'data')
+      const fullPath = join(dataDir, characterPath)
+      
+      console.log(`Loading character GLB from: ${fullPath}`)
+      
+      if (existsSync(fullPath)) {
+        const fs = await import('fs/promises')
+        const data = await fs.readFile(fullPath)
+        return {
+          data: data.toString('base64'),
+          path: fullPath
+        }
+      } else {
+        return { error: 'GLB file not found', path: characterPath }
+      }
+    } catch (error) {
+      console.error('Error loading character GLB:', error)
+      return { error: error.message }
+    }
+  })
+
   // Handler to get data directory path
   ipcMain.handle('get-data-dir', () => {
     return join(app.getPath('userData'), 'data')

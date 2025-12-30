@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { createBlockMesh } from '../utils/blockMeshCreator'
 import { createItemMesh } from '../utils/itemMeshCreator'
 import { createLightMesh } from '../utils/lightMeshCreator'
+import { createCharacterMesh } from '../utils/characterMeshCreator'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize, resizeObserver, handleTogglePreviewRender, handleKeyDown
@@ -332,7 +333,38 @@ onMounted(() => {
             return
           }
           
-          if (obj.type === 'block' && obj.blockPath) {
+          // Skip bone objects - they are internal to character models and shouldn't be visible
+          if (obj.type === 'bone') {
+            return
+          }
+          
+          if (obj.type === 'character' && obj.characterPath) {
+            // Handle character type with GLB models
+            createCharacterMesh(obj, window).then(result => {
+              if (result && result.mesh && !meshMap.has(obj.id)) {
+                // Hide bone guides by traversing the model
+                result.mesh.traverse((child) => {
+                  if (child.userData.isBone) {
+                    child.visible = false
+                  }
+                })
+                
+                if (obj.parent) {
+                  const parentMesh = meshMap.get(obj.parent)
+                  if (parentMesh) {
+                    parentMesh.add(result.mesh)
+                  } else {
+                    scene.add(result.mesh)
+                  }
+                } else {
+                  scene.add(result.mesh)
+                }
+                meshMap.set(obj.id, result.mesh)
+              }
+            }).catch(error => {
+              console.error('Failed to create character mesh:', error)
+            })
+          } else if (obj.type === 'block' && obj.blockPath) {
             createBlockMesh(obj, window).then(mesh => {
               if (mesh && !meshMap.has(obj.id)) {
                 if (obj.parent) {
@@ -565,6 +597,14 @@ onMounted(() => {
         objects.forEach(obj => {
           // Skip camera objects
           if (obj.type === 'perspective-camera' || obj.type === 'orthographic-camera') {
+            if (obj.children && obj.children.length > 0) {
+              updateMeshTransforms(obj.children, parentOpacity, parentPivotOffset)
+            }
+            return
+          }
+          
+          // Skip bone objects - they are internal to character models
+          if (obj.type === 'bone') {
             if (obj.children && obj.children.length > 0) {
               updateMeshTransforms(obj.children, parentOpacity, parentPivotOffset)
             }

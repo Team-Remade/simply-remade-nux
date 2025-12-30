@@ -9,6 +9,7 @@ import { createBlockMesh } from '../utils/blockMeshCreator'
 import { createItemMesh } from '../utils/itemMeshCreator'
 import { createCameraMesh } from '../utils/cameraMeshCreator'
 import { createLightMesh, updateBillboardRotation } from '../utils/lightMeshCreator'
+import { createCharacterMesh, updateBoneTransforms } from '../utils/characterMeshCreator'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize
@@ -623,6 +624,122 @@ onMounted(() => {
             }).catch(error => {
               console.error('Failed to create light mesh:', error)
             })
+          } else if (obj.type === 'character' && obj.characterPath) {
+            // Handle character type - async creation
+            createCharacterMesh(obj, window).then(result => {
+              if (result && result.mesh && !meshMap.has(obj.id)) {
+                const mesh = result.mesh
+                const bones = result.bones || []
+                
+                console.log('Character mesh created,bones received:', bones.length)
+                
+                // Add to scene or parent mesh
+                if (obj.parent) {
+                  const parentMesh = meshMap.get(obj.parent)
+                  if (parentMesh) {
+                    parentMesh.add(mesh)
+                  } else {
+                    scene.add(mesh)
+                  }
+                } else {
+                  scene.add(mesh)
+                }
+                
+                meshMap.set(obj.id, mesh)
+                
+                // Add bones to the scene tree with proper hierarchy
+                if (bones.length > 0) {
+                  // Find the character object in sceneObjects
+                  const characterInScene = sceneObjects.value.find(sobj => sobj.id === obj.id)
+                  if (characterInScene) {
+                    console.log(`Adding ${bones.length} bones to character ${characterInScene.name} with hierarchy`)
+                    
+                    // Initialize children array if needed
+                    if (!characterInScene.children) {
+                      characterInScene.children = []
+                    }
+                    
+                    // Create a map of bone ID to bone object for easy lookup
+                    const boneMap = new Map()
+                    bones.forEach(bone => {
+                      boneMap.set(bone.id, bone)
+                      // Initialize children array for each bone
+                      if (!bone.children) {
+                        bone.children = []
+                      }
+                    })
+                    
+                    // Add bones to their correct parents
+                    bones.forEach(bone => {
+                      if (bone.parent === obj.id) {
+                        // This bone's parent is the character itself
+                        const existingBone = characterInScene.children.find(child => child.id === bone.id)
+                        if (!existingBone) {
+                          characterInScene.children.push(bone)
+                          console.log(`Added bone ${bone.name} to character`)
+                        }
+                      } else {
+                        // This bone's parent is another bone
+                        const parentBone = boneMap.get(bone.parent)
+                        if (parentBone) {
+                          const existingBone = parentBone.children.find(child => child.id === bone.id)
+                          if (!existingBone) {
+                            parentBone.children.push(bone)
+                            console.log(`Added bone ${bone.name} to parent bone ${parentBone.name}`)
+                          }
+                        } else {
+                          console.warn(`Parent bone ${bone.parent} not found for ${bone.name}`)
+                        }
+                      }
+                    })
+                    
+                    // Trigger Vue reactivity - force update
+                    characterInScene.children = [...characterInScene.children]
+                    sceneObjects.value = [...sceneObjects.value]
+                    
+                    console.log(`Character scene tree updated with hierarchical bones`)
+                  } else {
+                    console.log('Character not found in sceneObjects')
+                  }
+                } else {
+                  console.log('No bones to add')
+                }
+              }
+            }).catch(error => {
+              console.error('Failed to create character mesh:', error)
+            })
+          } else if (obj.type === 'bone') {
+            // Create a white sphere as the bone controller
+            const geometry = new THREE.SphereGeometry(0.1, 16, 16)
+            const material = new THREE.MeshBasicMaterial({
+              color: 0xffffff,
+              transparent: false,
+              depthTest: true,
+              depthWrite: true
+            })
+            const mesh = new THREE.Mesh(geometry, material)
+            mesh.userData.sceneObjectId = obj.id
+            mesh.userData.isBone = true
+            mesh.userData.boneName = obj.boneName
+            
+            // Position the bone controller
+            mesh.position.set(obj.position.x, obj.position.y, obj.position.z)
+            mesh.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
+            mesh.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+            
+            // Add to scene or parent
+            if (obj.parent) {
+              const parentMesh = meshMap.get(obj.parent)
+              if (parentMesh) {
+                parentMesh.add(mesh)
+              } else {
+                scene.add(mesh)
+              }
+            } else {
+              scene.add(mesh)
+            }
+            
+            meshMap.set(obj.id, mesh)
           } else if (obj.type === 'cube') {
             const geometry = new THREE.BoxGeometry(1, 1, 1)
             
@@ -1191,10 +1308,36 @@ onMounted(() => {
       
       updateMeshTransforms(sceneObjects.value)
 
-      // Update all light billboards to face camera
+      // Update all light billboards to face camera and character bone transforms
       meshMap.forEach((mesh) => {
         if (mesh.userData.isLight) {
           updateBillboardRotation(mesh, camera)
+        }
+        
+        // Update bone transforms for character meshes
+        if (mesh.userData.isCharacter && mesh.userData.bonesMap) {
+          const characterObj = sceneObjects.value.find(obj => obj.id === mesh.userData.sceneObjectId)
+          
+          // Collect all bone objects from the scene tree (character's children)
+          const boneObjects = []
+          if (characterObj && characterObj.children) {
+            const collectBones = (children) => {
+              children.forEach(child => {
+                if (child.type === 'bone') {
+                  boneObjects.push(child)
+                }
+                // Recursively collect bones from sub-children
+                if (child.children && child.children.length > 0) {
+                  collectBones(child.children)
+                }
+              })
+            }
+            collectBones(characterObj.children)
+          }
+          
+          if (boneObjects.length > 0) {
+            updateBoneTransforms(mesh, boneObjects)
+          }
         }
       })
 

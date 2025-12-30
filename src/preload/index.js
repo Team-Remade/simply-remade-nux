@@ -7,9 +7,11 @@ const api = {
   getItems: () => ipcRenderer.invoke('get-items'),
   getItemTextures: () => ipcRenderer.invoke('get-item-textures'),
   getBlockTextures: () => ipcRenderer.invoke('get-block-textures'),
+  getCharacters: () => ipcRenderer.invoke('get-characters'),
   getDataDir: () => ipcRenderer.invoke('get-data-dir'),
   loadBlockModel: (blockPath) => ipcRenderer.invoke('load-block-model', blockPath),
   loadTexture: (texturePath) => ipcRenderer.invoke('load-texture', texturePath),
+  loadCharacterGLB: (characterPath) => ipcRenderer.invoke('load-character-glb', characterPath),
   createPreviewWindow: () => ipcRenderer.invoke('create-preview-window')
 }
 

@@ -24,6 +24,7 @@ const itemRenderMode = ref('voxel') // 'voxel' or 'plane'
 const itemTextureSource = ref('item') // 'item' or 'block'
 const blocks = ref([])
 const items = ref([])
+const characters = ref([])
 const itemTextures = ref({}) // Store loaded textures for items
 const blockTextures = ref([]) // Store block textures when in block mode
 const blockTextureItems = ref([]) // Store block textures as items for display
@@ -89,8 +90,19 @@ onMounted(async () => {
         }
       }
     }
+    
+    // Load characters
+    const charactersData = await window.api.getCharacters()
+    if (charactersData && charactersData.characters) {
+      characters.value = charactersData.characters.map(character => ({
+        name: character.name,
+        type: 'character',
+        characterPath: character.path,
+        id: character.path // Use path as unique identifier
+      }))
+    }
   } catch (error) {
-    console.error('Failed to load blocks/items:', error)
+    console.error('Failed to load blocks/items/characters:', error)
   }
 })
 
@@ -176,6 +188,7 @@ const spawnCategories = computed(() => {
     ],
     'Blocks': blockItems,
     'Items': itemsList,
+    'Characters': characters.value,
     'Lights': [
       { name: 'Point Light', type: 'pointlight' },
       { name: 'Directional Light', type: 'directionallight' },
@@ -357,9 +370,16 @@ const createObject = () => {
     newObject.itemRenderMode = itemRenderMode.value // 'voxel' or 'plane'
     newObject.itemTextureSource = itemTextureSource.value // 'item' or 'block'
   }
-  
-  // Mark camera objects with centered pivot offset
-  if (selectedItem.value.type === 'perspective-camera' || selectedItem.value.type === 'orthographic-camera') {
+
+// Add characterPath if it's a character
+if (selectedItem.value.characterPath) {
+  newObject.characterPath = selectedItem.value.characterPath
+  newObject.bones = [] // Will be populated when mesh is created
+  newObject.pivotOffset = { x: 0, y: 0, z: 0 } // Characters use centered pivot offset
+}
+
+// Mark camera objects with centered pivot offset
+if (selectedItem.value.type === 'perspective-camera' || selectedItem.value.type === 'orthographic-camera') {
     // Camera-specific pivot offset (centered)
     newObject.pivotOffset = { x: 0, y: 0, z: 0 }
   }

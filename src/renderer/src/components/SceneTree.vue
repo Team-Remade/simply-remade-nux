@@ -1,5 +1,5 @@
 <script setup>
-import { inject, ref } from 'vue'
+import { inject, ref, defineComponent, h } from 'vue'
 
 // Inject scene state from App.vue
 const sceneObjects = inject('sceneObjects')
@@ -125,6 +125,80 @@ const isDescendant = (checkObj, parentObj) => {
   
   return false
 }
+
+// Recursive TreeItem component
+const TreeItem = defineComponent({
+  name: 'TreeItem',
+  props: {
+    obj: Object,
+    depth: Number,
+    selectedObject: Object,
+    dropTarget: Object
+  },
+  emits: ['select', 'contextMenu', 'dragStart', 'dragEnd', 'dragOver', 'dragLeave', 'drop', 'toggleExpand'],
+  setup(props, { emit }) {
+    return () => {
+      const paddingLeft = props.depth * 16 + 12 // 16px per level + 12px base
+      
+      return h('div', { class: 'w-full' }, [
+        // Main item
+        h('div', {
+          draggable: true,
+          class: [
+            'flex items-center py-1 cursor-pointer text-[#ccc] text-[13px] select-none hover:bg-[#2c2c2c] transition-colors',
+            {
+              'bg-[#3c5a99] text-white': props.selectedObject === props.obj,
+              'bg-[#4a4a4a] outline outline-2 outline-blue-400': props.dropTarget === props.obj
+            }
+          ],
+          style: { paddingLeft: `${paddingLeft}px`, paddingRight: '12px' },
+          onClick: () => emit('select', props.obj),
+          onContextmenu: (e) => emit('contextMenu', e, props.obj),
+          onDragstart: (e) => emit('dragStart', e, props.obj),
+          onDragend: (e) => emit('dragEnd', e),
+          onDragover: (e) => emit('dragOver', e, props.obj),
+          onDragleave: (e) => emit('dragLeave', e),
+          onDrop: (e) => emit('drop', e, props.obj)
+        }, [
+          h('span', {
+            class: 'w-4 mr-1 text-[10px] cursor-pointer',
+            onClick: (e) => {
+              e.stopPropagation()
+              emit('toggleExpand', props.obj)
+            }
+          }, [
+            props.obj.children && props.obj.children.length > 0
+              ? h('i', {
+                  class: props.obj.expanded ? 'bi bi-chevron-down' : 'bi bi-chevron-right'
+                })
+              : null
+          ]),
+          h('span', props.obj.name)
+        ]),
+        // Children (recursive)
+        props.obj.expanded && props.obj.children
+          ? h('div', props.obj.children.map((child, index) =>
+              h(TreeItem, {
+                key: index,
+                obj: child,
+                depth: props.depth + 1,
+                selectedObject: props.selectedObject,
+                dropTarget: props.dropTarget,
+                onSelect: (obj) => emit('select', obj),
+                onContextMenu: (e, obj) => emit('contextMenu', e, obj),
+                onDragStart: (e, obj) => emit('dragStart', e, obj),
+                onDragEnd: (e) => emit('dragEnd', e),
+                onDragOver: (e, obj) => emit('dragOver', e, obj),
+                onDragLeave: (e) => emit('dragLeave', e),
+                onDrop: (e, obj) => emit('drop', e, obj),
+                onToggleExpand: (obj) => emit('toggleExpand', obj)
+              })
+            ))
+          : null
+      ])
+    }
+  }
+})
 </script>
 
 <template>
@@ -138,50 +212,22 @@ const isDescendant = (checkObj, parentObj) => {
       Scene Tree
     </div>
     <div class="flex-1 overflow-y-auto py-1">
-      <div v-for="(obj, index) in sceneObjects" :key="index" class="w-full">
-        <div
-          draggable="true"
-          class="flex items-center px-3 py-1 cursor-pointer text-[#ccc] text-[13px] select-none hover:bg-[#2c2c2c] transition-colors"
-          :class="{
-            'bg-[#3c5a99] text-white': selectedObject === obj,
-            'bg-[#4a4a4a] outline outline-2 outline-blue-400': dropTarget === obj
-          }"
-          @click="selectObject(obj)"
-          @contextmenu="showContextMenu($event, obj)"
-          @dragstart="handleDragStart($event, obj)"
-          @dragend="handleDragEnd"
-          @dragover="handleDragOver($event, obj)"
-          @dragleave="handleDragLeave"
-          @drop="handleDrop($event, obj)"
-        >
-          <span class="w-4 mr-1 text-[10px] cursor-pointer" @click.stop="toggleExpand(obj)">
-            <i v-if="obj.children" :class="obj.expanded ? 'bi bi-chevron-down' : 'bi bi-chevron-right'"></i>
-          </span>
-          <span>{{ obj.name }}</span>
-        </div>
-        <div v-if="obj.expanded && obj.children">
-          <div
-            v-for="(child, childIndex) in obj.children"
-            :key="childIndex"
-            draggable="true"
-            class="flex items-center pl-7 pr-3 py-1 cursor-pointer text-[#ccc] text-[13px] select-none hover:bg-[#2c2c2c] transition-colors"
-            :class="{
-              'bg-[#3c5a99] text-white': selectedObject === child,
-              'bg-[#4a4a4a] outline outline-2 outline-blue-400': dropTarget === child
-            }"
-            @click="selectObject(child)"
-            @contextmenu="showContextMenu($event, child)"
-            @dragstart="handleDragStart($event, child)"
-            @dragend="handleDragEnd"
-            @dragover="handleDragOver($event, child)"
-            @dragleave="handleDragLeave"
-            @drop="handleDrop($event, child)"
-          >
-            <span class="w-4 mr-1">  </span>
-            <span>{{ child.name }}</span>
-          </div>
-        </div>
-      </div>
+      <TreeItem
+        v-for="(obj, index) in sceneObjects"
+        :key="index"
+        :obj="obj"
+        :depth="0"
+        :selected-object="selectedObject"
+        :drop-target="dropTarget"
+        @select="selectObject"
+        @context-menu="showContextMenu"
+        @drag-start="handleDragStart"
+        @drag-end="handleDragEnd"
+        @drag-over="handleDragOver"
+        @drag-leave="handleDragLeave"
+        @drop="handleDrop"
+        @toggle-expand="toggleExpand"
+      />
     </div>
     
     <!-- Context Menu -->
