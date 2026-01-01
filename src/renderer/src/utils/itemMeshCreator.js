@@ -388,7 +388,8 @@ export const createItemMesh = async (obj, window) => {
                   map: faceTexture,
                   transparent: true,
                   opacity: obj.opacity,
-                  depthWrite: false,
+                  depthWrite: obj.opacity >= 1, // Only enable depthWrite for opaque objects
+                  depthTest: true,
                   side: THREE.FrontSide,
                   alphaTest: 0.1
                 }))
@@ -397,7 +398,7 @@ export const createItemMesh = async (obj, window) => {
                   visible: false,
                   transparent: true,
                   opacity: 0,
-                  depthWrite: false
+                  depthWrite: true // Keep depthWrite enabled for invisible materials
                 }))
               }
             } else {
@@ -405,7 +406,7 @@ export const createItemMesh = async (obj, window) => {
                 visible: false,
                 transparent: true,
                 opacity: 0,
-                depthWrite: false
+                depthWrite: true // Keep depthWrite enabled for invisible materials
               }))
             }
           }

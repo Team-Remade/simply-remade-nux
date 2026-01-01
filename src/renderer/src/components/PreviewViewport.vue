@@ -128,10 +128,21 @@ onMounted(() => {
     camera.position.set(0, 0, 5)
     camera.rotation.order = 'YXZ'
 
-    // Create renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true })
+    // Create renderer with improved depth testing configuration
+    renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: false,
+      logarithmicDepthBuffer: true, // Better depth precision for large scenes
+      sortObjects: true, // Enable object sorting
+      powerPreference: 'high-performance'
+    })
     renderer.setSize(canvasContainer.value.clientWidth, canvasContainer.value.clientHeight)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)) // Limit pixel ratio for performance
     canvasContainer.value.appendChild(renderer.domElement)
+    
+    // Configure renderer for better depth testing
+    renderer.sortObjects = true
+    renderer.shadowMap.enabled = false // Disable shadows for better performance
 
     // Add lights
     ambientLight = new THREE.AmbientLight(0xffffff, 0.3)
@@ -157,11 +168,14 @@ onMounted(() => {
     
     const floorMaterial = new THREE.MeshStandardMaterial({
       color: 0x91bd59, // Green tint for grass
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      depthWrite: true, // Enable depth writing for floor
+      depthTest: true
     })
     floorMesh = new THREE.Mesh(floorGeometry, floorMaterial)
     floorMesh.rotation.x = -Math.PI / 2 // Rotate to be horizontal
     floorMesh.position.y = 0 // Place at y=0
+    floorMesh.renderOrder = 0 // Render after background plane (-1000) but before objects
     scene.add(floorMesh)
 
     // Helper function to load floor texture
@@ -349,6 +363,10 @@ onMounted(() => {
                 
                 // Bone guides will be hidden by bone processing logic
                 
+                // Set renderOrder for character meshes
+                const isTransparent = obj.opacity < 1
+                mesh.renderOrder = isTransparent ? 5 : 3
+                
                 // Add to scene or parent mesh
                 if (obj.parent) {
                   const parentMesh = meshMap.get(obj.parent)
@@ -427,6 +445,10 @@ onMounted(() => {
           } else if (obj.type === 'block' && obj.blockPath) {
             createBlockMesh(obj, window).then(mesh => {
               if (mesh && !meshMap.has(obj.id)) {
+                // Set renderOrder for block meshes
+                const isTransparent = obj.opacity < 1
+                mesh.renderOrder = isTransparent ? 4 : 2
+                
                 if (obj.parent) {
                   const parentMesh = meshMap.get(obj.parent)
                   if (parentMesh) {
@@ -443,6 +465,10 @@ onMounted(() => {
           } else if (obj.type === 'item' && obj.itemPath) {
             createItemMesh(obj, window).then(mesh => {
               if (mesh && !meshMap.has(obj.id)) {
+                // Set renderOrder for item meshes
+                const isTransparent = obj.opacity < 1
+                mesh.renderOrder = isTransparent ? 6 : 4
+                
                 if (obj.parent) {
                   const parentMesh = meshMap.get(obj.parent)
                   if (parentMesh) {
@@ -468,6 +494,10 @@ onMounted(() => {
                   const lightContainer = new THREE.Object3D()
                   lightContainer.add(light)
                   lightContainer.position.set(obj.position.x, obj.position.y, obj.position.z)
+                  
+                  // Set renderOrder for light containers
+                  const isTransparent = obj.opacity < 1
+                  lightContainer.renderOrder = isTransparent ? 7 : 6
                   
                   // Store references
                   lightContainer.userData.sceneObjectId = obj.id
@@ -502,10 +532,15 @@ onMounted(() => {
               obj.pivotOffset = { x: 0, y: -0.5, z: 0 }
             }
             
+            // Determine if object should be transparent
+            const isTransparent = obj.opacity < 1
+            
             const material = new THREE.MeshStandardMaterial({
               color: 0xffffff,
               transparent: true,
-              opacity: obj.opacity
+              opacity: obj.opacity,
+              depthWrite: !isTransparent, // Disable depthWrite for transparent objects
+              depthTest: true
             })
             const mesh = new THREE.Mesh(geometry, material)
             mesh.userData.sceneObjectId = obj.id
@@ -526,6 +561,9 @@ onMounted(() => {
             container.position.set(obj.position.x, obj.position.y, obj.position.z)
             container.rotation.set(obj.rotation.x, obj.rotation.y, obj.rotation.z)
             container.scale.set(obj.scale.x, obj.scale.y, obj.scale.z)
+            
+            // Set renderOrder for proper sorting
+            container.renderOrder = isTransparent ? 2 : 1
             
             // Store references
             container.userData.sceneObjectId = obj.id
