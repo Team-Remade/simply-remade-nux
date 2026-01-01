@@ -3,8 +3,8 @@ import { ref, inject, watch, onMounted, onUnmounted, computed } from 'vue'
 import * as THREE from 'three'
 import { createBlockMesh } from '../utils/blockMeshCreator'
 import { createItemMesh } from '../utils/itemMeshCreator'
-import { createLightMesh } from '../utils/lightMeshCreator'
-import { createCharacterMesh } from '../utils/characterMeshCreator'
+import { createLightMesh, updateBillboardRotation } from '../utils/lightMeshCreator'
+import { createCharacterMesh, updateBoneTransforms } from '../utils/characterMeshCreator'
 
 const canvasContainer = ref(null)
 let scene, camera, renderer, animationId, handleResize, resizeObserver, handleTogglePreviewRender, handleKeyDown
@@ -339,27 +339,87 @@ onMounted(() => {
           }
           
           if (obj.type === 'character' && obj.characterPath) {
-            // Handle character type with GLB models
+            // Handle character type - async creation
             createCharacterMesh(obj, window).then(result => {
               if (result && result.mesh && !meshMap.has(obj.id)) {
-                // Hide bone guides by traversing the model
-                result.mesh.traverse((child) => {
-                  if (child.userData.isBone) {
-                    child.visible = false
-                  }
-                })
+                const mesh = result.mesh
+                const bones = result.bones || []
                 
+                console.log('Character mesh created in preview, bones received:', bones.length)
+                
+                // Bone guides will be hidden by bone processing logic
+                
+                // Add to scene or parent mesh
                 if (obj.parent) {
                   const parentMesh = meshMap.get(obj.parent)
                   if (parentMesh) {
-                    parentMesh.add(result.mesh)
+                    parentMesh.add(mesh)
                   } else {
-                    scene.add(result.mesh)
+                    scene.add(mesh)
                   }
                 } else {
-                  scene.add(result.mesh)
+                  scene.add(mesh)
                 }
-                meshMap.set(obj.id, result.mesh)
+                
+                meshMap.set(obj.id, mesh)
+                
+                // Add bones to the scene tree with proper hierarchy
+                if (bones.length > 0) {
+                  // Find the character object in sceneObjects
+                  const characterInScene = sceneObjects.value.find(sobj => sobj.id === obj.id)
+                  if (characterInScene) {
+                    console.log(`Adding ${bones.length} bones to character ${characterInScene.name} with hierarchy`)
+                    
+                    // Initialize children array if needed
+                    if (!characterInScene.children) {
+                      characterInScene.children = []
+                    }
+                    
+                    // Create a map of bone ID to bone object for easy lookup
+                    const boneMap = new Map()
+                    bones.forEach(bone => {
+                      boneMap.set(bone.id, bone)
+                      // Initialize children array for each bone
+                      if (!bone.children) {
+                        bone.children = []
+                      }
+                    })
+                    
+                    // Add bones to their correct parents
+                    bones.forEach(bone => {
+                      if (bone.parent === obj.id) {
+                        // This bone's parent is the character itself
+                        const existingBone = characterInScene.children.find(child => child.id === bone.id)
+                        if (!existingBone) {
+                          characterInScene.children.push(bone)
+                          console.log(`Added bone ${bone.name} to character`)
+                        }
+                      } else {
+                        // This bone's parent is another bone
+                        const parentBone = boneMap.get(bone.parent)
+                        if (parentBone) {
+                          const existingBone = parentBone.children.find(child => child.id === bone.id)
+                          if (!existingBone) {
+                            parentBone.children.push(bone)
+                            console.log(`Added bone ${bone.name} to parent bone ${parentBone.name}`)
+                          }
+                        } else {
+                          console.warn(`Parent bone ${bone.parent} not found for ${bone.name}`)
+                        }
+                      }
+                    })
+                    
+                    // Trigger Vue reactivity - force update
+                    characterInScene.children = [...characterInScene.children]
+                    sceneObjects.value = [...sceneObjects.value]
+                    
+                    console.log(`Character scene tree updated with hierarchical bones`)
+                  } else {
+                    console.log('Character not found in sceneObjects')
+                  }
+                } else {
+                  console.log('No bones to add')
+                }
               }
             }).catch(error => {
               console.error('Failed to create character mesh:', error)
@@ -695,6 +755,39 @@ onMounted(() => {
       }
       
       updateMeshTransforms(sceneObjects.value)
+
+      // Update all light billboards to face camera and character bone transforms
+      meshMap.forEach((mesh) => {
+        if (mesh.userData.isLight) {
+          updateBillboardRotation(mesh, camera)
+        }
+        
+        // Update bone transforms for character meshes
+        if (mesh.userData.isCharacter && mesh.userData.bonesMap) {
+          const characterObj = sceneObjects.value.find(obj => obj.id === mesh.userData.sceneObjectId)
+          
+          // Collect all bone objects from the scene tree (character's children)
+          const boneObjects = []
+          if (characterObj && characterObj.children) {
+            const collectBones = (children) => {
+              children.forEach(child => {
+                if (child.type === 'bone') {
+                  boneObjects.push(child)
+                }
+                // Recursively collect bones from sub-children
+                if (child.children && child.children.length > 0) {
+                  collectBones(child.children)
+                }
+              })
+            }
+            collectBones(characterObj.children)
+          }
+          
+          if (boneObjects.length > 0) {
+            updateBoneTransforms(mesh, boneObjects)
+          }
+        }
+      })
 
       renderer.render(scene, camera)
     }
